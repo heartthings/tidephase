@@ -128,7 +128,7 @@ services:
     volumes:
       - ../configs:/app/configs:ro
       - ../data_api:/app/data_api:ro
-    command: python -c "import time; print('market-api placeholder; Z2 wave will implement FastAPI'); [time.sleep(60) for _ in iter(int, 1)]"
+    command: python -m uvicorn data_api.main:app --host 0.0.0.0 --port 8787
     healthcheck:
       test: ["CMD-SHELL", "python -c 'print(\"placeholder\")'"]
       interval: 30s
