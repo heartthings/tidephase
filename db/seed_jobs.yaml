@@ -1,0 +1,203 @@
+# seed_jobs.yaml → job_registry 种子数据
+# M1 的 18 个作业（§4.1）
+# 盘中作业 enabled=false（开市后由梁总下令启用）
+# cron 时区 Asia/Shanghai
+
+jobs:
+  - job_name: j_trade_cal
+    domain: D0
+    target_tables: [trade_cal, session_def]
+    schedule_cron: "0 0 1 1 *"  # 每年1/1全量 + 每月1日核对
+    source_chain: ["akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: true
+    enabled: true
+    note: "交易日历；每年1/1全量+每月1日核对"
+
+  - job_name: j_instrument_master
+    domain: auxiliary
+    target_tables: [instrument_master]
+    schedule_cron: "0 8 * * *"
+    source_chain: ["akshare", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "证券主档日更"
+
+  - job_name: j_global_overnight
+    domain: D7
+    target_tables: [global_daily]
+    schedule_cron: "30 7 * * 1-5"
+    source_chain: ["tencent", "eastmoney", "sina", "akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: true
+    enabled: true
+    note: "隔夜全球（美/欧/外汇/商品/美债/VIX/期货）07:30保证08:00前就绪"
+
+  - job_name: j_global_asia
+    domain: D7
+    target_tables: [global_daily]
+    schedule_cron: "0 16 * * 1-5"
+    source_chain: ["eastmoney", "tencent", "sina"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: true
+    enabled: true
+    note: "亚洲收盘（港/韩/日）16:00"
+
+  - job_name: j_global_minute_pre
+    domain: D7
+    target_tables: [global_minute]
+    schedule_cron: "*/15 6-9 * * 1-5"
+    source_chain: ["sina", "tencent"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 120
+    critical: false
+    enabled: false
+    note: "盘前15min（ES/NQ期货等）06:00-09:30；盘中作业，开市后启用"
+
+  - job_name: j_index_daily
+    domain: D1
+    target_tables: [index_daily]
+    schedule_cron: "10 15 * * 1-5"
+    source_chain: ["mootdx", "tencent", "akshare", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: true
+    enabled: true
+    note: "六大指数日K 15:10"
+
+  - job_name: j_index_minute
+    domain: D1
+    target_tables: [index_minute]
+    schedule_cron: "0 16 * * 1-5"
+    source_chain: ["mootdx", "tencent"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "六大指数1m K线 16:00"
+
+  - job_name: j_stock_daily
+    domain: D2
+    target_tables: [stock_daily]
+    schedule_cron: "30 15 * * 1-5"
+    source_chain: ["akshare", "tencent", "mootdx"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 1800
+    critical: true
+    enabled: true
+    note: "全市场个股日K 15:30（东财全市场快照→逐股kline兜底）"
+
+  - job_name: j_etf_daily
+    domain: D2
+    target_tables: [etf_daily]
+    schedule_cron: "35 15 * * 1-5"
+    source_chain: ["akshare", "tencent"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "ETF日K 15:35"
+
+  - job_name: j_zt_pools
+    domain: D3
+    target_tables: [zt_pool, zb_pool, dt_pool, yzt_pool]
+    schedule_cron: "15 15 * * 1-5"
+    source_chain: ["eastmoney", "akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: true
+    enabled: true
+    note: "涨停/炸板/跌停/昨涨今现池 15:15 终版；龙虎源待Z2 T-R1后启用"
+
+  - job_name: j_sentiment_calc
+    domain: D3
+    target_tables: [sentiment_daily]
+    schedule_cron: "40 15 * * 1-5"
+    source_chain: ["eastmoney", "akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: true
+    enabled: true
+    note: "情绪日度汇总 15:40（依赖j_zt_pools+j_stock_daily）；龙虎Emotion待Z2"
+
+  - job_name: j_bidding_list
+    domain: D3
+    target_tables: [bidding_list]
+    schedule_cron: "26 9 * * 1-5"
+    source_chain: ["eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: false
+    enabled: false
+    note: "竞价列表09:26终版；龙虎MorningBiddingList待Z2 T-R1后启用"
+
+  - job_name: j_stock_minute
+    domain: D2
+    target_tables: [stock_minute]
+    schedule_cron: "45 15 * * 1-5"
+    source_chain: ["mootdx", "tencent"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "观察池1m K线 15:45"
+
+  - job_name: j_verify_daily
+    domain: pipeline
+    target_tables: [verify_source, verify_diff]
+    schedule_cron: "0 17 * * 1-5"
+    source_chain: ["tencent", "mootdx"]
+    retry_policy: {"tries": 2, "backoff_s": [10, 60]}
+    timeout_s: 900
+    critical: false
+    enabled: true
+    note: "双源复核 17:00"
+
+  - job_name: j_backfill_daily
+    domain: pipeline
+    target_tables: []
+    schedule_cron: "0 7 * * 1-5"
+    source_chain: ["tencent", "mootdx", "akshare", "eastmoney"]
+    retry_policy: {"tries": 2, "backoff_s": [10, 60]}
+    timeout_s: 1800
+    critical: false
+    enabled: true
+    note: "次日补采 07:00（扫昨日MISS/quarantine pending）"
+
+  - job_name: j_coverage_check
+    domain: pipeline
+    target_tables: []
+    schedule_cron: "15 7 * * 1-5"
+    source_chain: ["internal"]
+    retry_policy: {"tries": 1, "backoff_s": [5]}
+    timeout_s: 300
+    critical: true
+    enabled: true
+    note: "覆盖率检查 07:15（缺失率>0.1%告警）"
+
+  - job_name: j_heartbeat
+    domain: pipeline
+    target_tables: [ingest_log]
+    schedule_cron: "*/15 * * * *"
+    source_chain: ["internal"]
+    retry_policy: {"tries": 1, "backoff_s": [5]}
+    timeout_s: 30
+    critical: false
+    enabled: true
+    note: "心跳 每15min"
+
+  - job_name: j_daily_report
+    domain: pipeline
+    target_tables: []
+    schedule_cron: "45 16 * * 1-5"
+    source_chain: ["internal"]
+    retry_policy: {"tries": 1, "backoff_s": [5]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "采集日报 16:45（飞书webhook）"

@@ -1,0 +1,49 @@
+# 限速配置
+# rps: requests per second
+# burst: max burst size
+# jitter_s: [min, max] random jitter (for akshare)
+
+eastmoney:
+  rps: 0.5
+  burst: 2
+
+tencent:
+  rps: 2.0
+  burst: 4
+
+akshare:
+  rps: 1.0
+  burst: 1
+  jitter_s: [0.3, 1.0]
+
+mootdx:
+  rps: 4.0
+  burst: 4
+
+sina:
+  rps: 2.0
+  burst: 4
+
+longhu:
+  rps: 0.5
+  burst: 1
+
+hkex:
+  rps: 0.5
+  burst: 2
+
+cninfo:
+  rps: 0.5
+  burst: 2
+
+cls:
+  rps: 0.5
+  burst: 2
+
+ths:
+  rps: 0.5
+  burst: 2
+
+internal:
+  rps: 10.0
+  burst: 10

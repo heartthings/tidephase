@@ -1,0 +1,74 @@
+# 观势数据层 (market-datalayer)
+
+> 自建时序库（TimescaleDB）+ 12 域 54 表采集管道 + data-api 19 端点
+
+## 架构
+
+```
+数据源（腾讯/东财/通达信/AKShare/新浪/龙虎/…）
+    ↓
+dsched 调度服务（APScheduler + job_registry）
+    ↓
+dworker 采集工作器（源适配器 + 降级链 + 限速 + 校验 + quarantine）
+    ↓
+TimescaleDB (PG16) · market_tsdb
+    ↓
+data-api (FastAPI :8787) → 观势 skill
+```
+
+## 目录结构
+
+```
+market-datalayer/
+├── db/migrations/            # DDL 迁移（V001__init...）
+├── dworker/                  # 采集框架
+│   ├── adapters/             # 源适配器（tencent/eastmoney/mootdx/akshare/sina）
+│   ├── core/                 # 降级链/限速/重试/校验/quarantine
+│   └── validate/             # 校验引擎
+├── dsched/                   # 调度服务
+├── data_api/                 # FastAPI（Z2 实装）
+├── tools/                    # 迁移/回填/冒烟工具
+├── ops/                      # docker-compose / WAL-G / 告警
+├── configs/                  # rate_limits / validation_rules / secrets（不入 git）
+├── tests/                    # 单元测试
+├── data/raw/                 # raw 归档（不入 git）
+└── reports/                  # 施工报告
+```
+
+## 快速启动
+
+```bash
+# 1. 配置凭证
+cp configs/secrets.yaml.example configs/secrets.yaml
+# 编辑 secrets.yaml 填入密码
+
+# 2. 启动服务
+cd ops && docker compose up -d
+
+# 3. 运行迁移
+python3 tools/migrate.py --host 127.0.0.1 --port 15432 --user postgres --password <super_pw>
+
+# 4. 验证
+docker compose ps
+```
+
+## 角色权限
+
+| 角色 | 权限 | 用途 |
+|------|------|------|
+| duser_writer | SELECT/INSERT/UPDATE 采集表 | 采集管道 |
+| duser_reader | SELECT + statement_timeout=30s | data-api 查询 |
+| duser_admin | ALL | 运维/DDL |
+| duser_d12writer | cognition/prediction/base_rate INSERT/UPDATE | D12 写通道 |
+
+## 安全红线
+
+- 凭证/密码/token 一律不进 git（secrets.yaml + .gitignore）
+- 监听端口只绑 127.0.0.1（或 compose 内网）
+- 不动生产容器
+- API 永不公网暴露
+
+## 状态
+
+- **Z1 波**：数据层基建 ✅ 完成
+- **Z2 波**：data-api 实装 + 龙虎 adapter（进行中）

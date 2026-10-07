@@ -1,0 +1,34 @@
+# Secrets & credentials
+configs/secrets.yaml
+*.env
+.env
+
+# Raw data archive
+data/raw/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports with sensitive data
+reports/*_sensitive_*
+
+# Docker volumes (local dev)
+ops/data/

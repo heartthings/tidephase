@@ -1,0 +1,149 @@
+# 观势数据层 docker-compose · Z1 波
+# 四服务：market-tsdb / market-sched / market-worker / market-api
+# 所有端口仅绑 127.0.0.1 或 compose 内网，永不 0.0.0.0
+# 不动生产容器（lovetrade-service/love_mysql_prod/mysql_green/aitoearn-*/1Panel-*）
+
+version: "3.9"
+
+services:
+  # ─── TimescaleDB (PG16) ───────────────────────────────────────────
+  market-tsdb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: market-tsdb
+    restart: always
+    environment:
+      POSTGRES_DB: market_tsdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD}
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:15432:5432"    # 宿主调试端口；生产容器走内网
+    volumes:
+      - tsdb_data:/home/postgres/pgdata/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d market_tsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - market-net
+    # Performance tuning for 125G RAM host (share 2GB to PG)
+    command: >
+      postgres
+        -c timezone=Asia/Shanghai
+        -c shared_buffers=2GB
+        -c max_parallel_workers_per_gather=4
+        -c max_connections=50
+        -c log_timezone=Asia/Shanghai
+
+  # ─── Scheduler (APScheduler) ──────────────────────────────────────
+  market-sched:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.worker
+    container_name: market-sched
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      MARKET_TSDB_HOST: market-tsdb
+      MARKET_TSDB_PORT: "5432"
+      MARKET_TSDB_NAME: market_tsdb
+      MARKET_TSDB_USER: duser_writer
+      MARKET_TSDB_PASSWORD: ${DUSER_WRITER_PASSWORD}
+      MARKET_ROLE: sched
+    depends_on:
+      market-tsdb:
+        condition: service_healthy
+    volumes:
+      - ../configs:/app/configs:ro
+      - ../dworker:/app/dworker:ro
+      - ../dsched:/app/dsched:ro
+      - ../data/raw:/app/data/raw
+    command: python -m dsched.main
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import pathlib; exit(0 if pathlib.Path(\"/tmp/market-sched-heartbeat\").exists() and (pathlib.Path(\"/tmp/market-sched-heartbeat\").stat().st_mtime > 0) else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - market-net
+
+  # ─── Worker (采集工作器) ──────────────────────────────────────────
+  market-worker:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.worker
+    container_name: market-worker
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      MARKET_TSDB_HOST: market-tsdb
+      MARKET_TSDB_PORT: "5432"
+      MARKET_TSDB_NAME: market_tsdb
+      MARKET_TSDB_USER: duser_writer
+      MARKET_TSDB_PASSWORD: ${DUSER_WRITER_PASSWORD}
+      MARKET_ROLE: worker
+    depends_on:
+      market-tsdb:
+        condition: service_healthy
+    volumes:
+      - ../configs:/app/configs:ro
+      - ../dworker:/app/dworker:ro
+      - ../data/raw:/app/data/raw
+    command: python -c "import time; print('market-worker ready; jobs dispatched by market-sched'); [time.sleep(60) for _ in iter(int, 1)]"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'print(\"alive\")'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - market-net
+
+  # ─── Data API (FastAPI, Z2 实装；本波占位) ────────────────────────
+  market-api:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.api
+    container_name: market-api
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      MARKET_TSDB_HOST: market-tsdb
+      MARKET_TSDB_PORT: "5432"
+      MARKET_TSDB_NAME: market_tsdb
+      MARKET_TSDB_USER_READER: duser_reader
+      MARKET_TSDB_READER_PASSWORD: ${DUSER_READER_PASSWORD}
+      MARKET_TSDB_USER_D12WRITER: duser_d12writer
+      MARKET_TSDB_D12WRITER_PASSWORD: ${DUSER_D12WRITER_PASSWORD}
+      MARKET_API_HOST: "0.0.0.0"
+      MARKET_API_PORT: "8787"
+    ports:
+      - "127.0.0.1:8787:8787"    # 仅本机访问，永不公网
+    depends_on:
+      market-tsdb:
+        condition: service_healthy
+    volumes:
+      - ../configs:/app/configs:ro
+      - ../data_api:/app/data_api:ro
+    command: python -c "import time; print('market-api placeholder; Z2 wave will implement FastAPI'); [time.sleep(60) for _ in iter(int, 1)]"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'print(\"placeholder\")'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - market-net
+
+volumes:
+  tsdb_data:
+    driver: local
+
+networks:
+  market-net:
+    driver: bridge

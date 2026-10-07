@@ -1,0 +1,45 @@
+# 校验规则配置
+# 规则类型：block（隔离到quarantine）/ warn（标记但入库）
+
+rules:
+  # K线类通用规则
+  ohlc_consistency:
+    severity: block
+    description: "high >= max(open,close) >= min(open,close) >= low > 0"
+    applies_to: [index_daily, stock_daily, etf_daily, index_minute, stock_minute, global_daily]
+
+  magnitude:
+    severity: block
+    description: "0.01 < close < 1e6; 0 <= volume < 1e11; 0 <= amount < 1e13"
+    applies_to: [index_daily, stock_daily, etf_daily, global_daily]
+
+  not_null:
+    severity: block
+    description: "PK列与close非空"
+    applies_to: "*"
+    required_fields: ["close"]
+
+  pct_consistency:
+    severity: block
+    description: "|pct - (close/prev_close - 1) * 100| <= 0.02"
+    applies_to: [index_daily, stock_daily, etf_daily, global_daily]
+    tolerance: 0.02
+
+  # 软告警规则
+  soft_warn:
+    severity: warn
+    description: "turnover_rate > 100% 或 单日振幅 > 44%"
+    applies_to: [stock_daily, etf_daily]
+    thresholds:
+      turnover_rate_max: 100
+      amplitude_max: 44
+
+  # 枚举校验
+  enum:
+    severity: block
+    description: "枚举值校验"
+    fields:
+      market: [CN_SH, CN_SZ, CN_BJ, HK, US, IDX, GLOBAL, KR, JP, EU, FX, RATE, CMD, RISK, FUT]
+      status: [active, delisted, suspended]
+      inst_type: [stock, etf, lof, index, global, option_underlying]
+      result: [pending, hit, miss, invalid, expired]
