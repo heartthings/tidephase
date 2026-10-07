@@ -3,8 +3,6 @@
 # 所有端口仅绑 127.0.0.1 或 compose 内网，永不 0.0.0.0
 # 不动生产容器（lovetrade-service/love_mysql_prod/mysql_green/aitoearn-*/1Panel-*）
 
-version: "3.9"
-
 services:
   # ─── TimescaleDB (PG16) ───────────────────────────────────────────
   market-tsdb:
