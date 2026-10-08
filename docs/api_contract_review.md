@@ -1,9 +1,12 @@
 # data-api 契约评审意见（T2.11 初稿）
 
-> 编制：造物（wuzao）| 2026-10-07 | v0.1 初稿
+> 编制：造物（wuzao）| 2026-10-07 | v1.0 冻结版
 > 评审对象：dujun-tech-proposal.md v1.2 §5.2 全部 19 端点（E1–E19）
 > 评审视角：产品/消费方（观势 skill 封装的易用性、参数一致性、错误处理完备性）
 > 分级：**必须**（阻塞上线，铸码必须修复）/ **建议**（不阻塞但影响易用性，优先修复）
+> 
+> **变更记录**：
+> - v0.1 → v1.0：观势 2026-10-07 裁决必须-9/10/11/13 全部确认（详见 §6 裁决记录）
 
 ---
 
@@ -137,8 +140,8 @@
 | 项 | 意见 |
 |----|------|
 | 参数 | `regime, category, horizon, window_end=latest` ✅ |
-| **必须-9** | 应与 `base_rate_calibration_spec.md` 口径对齐：返回 `n_samples, hit_rate, stat_json`（含 Wilson CI）、`reliability` 标记。方案 §5.2 仅列参数未列响应字段，需补齐 |
-| **必须-10** | `window_end=latest` 语义需明确：返回最新一条 or 最新双口径（滚动90+全历史）两行？建议默认返回双口径，参数 `window_type=rolling_90|full|both` 可过滤 |
+| **必须-9** ✅ 观势已裁决 | 应与 `base_rate_calibration_spec.md` 口径对齐：返回 `n_samples, hit_rate, stat_json`（含 Wilson CI）、`reliability` 标记。方案 §5.2 仅列参数未列响应字段，需补齐。**观势 2026-10-07 确认：n_samples/hit_rate/Wilson CI/reliability 全上** |
+| **必须-10** ✅ 观势已裁决 | `window_type` 默认 `both` 双行返回。**观势 2026-10-07 确认**：rolling_90 为决策主依据、full 为趋势参考，两者偏离 >15pp 时观势侧标注"基率不稳" |
 | **建议-14** | 返回 `stat_json` 时应解析为结构化 JSON（非字符串），方便观势 skill 直接消费 |
 | 分级 | 必须（响应字段定义、双口径） |
 
@@ -147,7 +150,7 @@
 | 项 | 意见 |
 |----|------|
 | 参数 | `category, window` ✅ |
-| **必须-11** | 应与 `base_rate_calibration_spec.md` 口径对齐：返回 `n, avg_conf_pct, hit_rate, brier`。方案 §5.2 未列响应字段 |
+| **必须-11** ✅ 观势已裁决 | 应与 `base_rate_calibration_spec.md` 口径对齐：返回 `n, avg_conf_pct, hit_rate, brier`。**观势 2026-10-07 确认**：confidence_pct 取值域 0-100 整数，无额外字段 |
 | **建议-15** | `window` 参数格式建议 `YYYY-MM`（单月）或 `YYYY-MM:YYYY-MM`（范围），文档明确 |
 | **建议-16** | 增加 `bucket_by=month|confidence` 参数（V1 仅实现 month），为 V2 confidence 分桶预留 |
 | 分级 | 必须（响应字段定义） |
@@ -174,7 +177,7 @@
 |----|------|
 | 参数 | body=认知字段 ✅ |
 | **必须-12** | PUT 响应应返回新创建的 version 号（`{"version": 3, "cognition_id": "F-001"}`），观势需确认升版成功 |
-| **必须-13** | POST 时 `cognition_id` 由观势传入（F/C/H/M 前缀），API 不自动生成（§10-Q8 冻结：ID 分配权在观势认知库）。若 ID 已存在且 version=1，返回 `CONFLICT` |
+| **必须-13** ✅ 观势已裁决 | POST 时 `cognition_id` 由观势传入（F/C/H/M 前缀），API 不自动生成。**观势 2026-10-07 确认**：cognition_id 分配权归观势，API 仅做格式校验（`^[FCHM]-\d{3}$`）+ 重复返回 409 |
 | **建议-19** | 请求体应做 schema 校验（必填字段：cognition_id, type, title, statement, confidence），校验失败返回 `BAD_PARAM` + 具体字段错误列表 |
 | 分级 | 必须（返回 version、不自动生成 ID） |
 
@@ -242,10 +245,10 @@
 | 检查项 | base_rate_calibration_spec.md | 方案 v1.2 §5.2 | 对齐状态 |
 |--------|------------------------------|-----------------|----------|
 | E8 参数 | regime, category, horizon, window_end | regime, category, horizon, window_end=latest | ✅ 一致 |
-| E8 响应 | n_samples, hit_rate, stat_json, reliability | 未定义 | ⚠️ 需补齐（必须-9） |
-| E8 双口径 | 滚动90+全历史两行 | 未提及 | ⚠️ 需补齐（必须-10） |
+| E8 响应 | n_samples, hit_rate, stat_json, reliability | 未定义 | ✅ 观势已裁决（必须-9），铸码需补齐 |
+| E8 双口径 | 滚动90+全历史两行 | 未提及 | ✅ 观势已裁决（必须-10），默认 both 双行 |
 | E9 参数 | category, window | category, window | ✅ 一致 |
-| E9 响应 | n, avg_conf_pct, hit_rate, brier | 未定义 | ⚠️ 需补齐（必须-11） |
+| E9 响应 | n, avg_conf_pct, hit_rate, brier | 未定义 | ✅ 观势已裁决（必须-11），铸码需补齐 |
 | E9 分桶 | 按月（V1），按 confidence（V2） | 未提及 | ⚠️ 需预留参数（建议-16） |
 
 ---
@@ -259,7 +262,7 @@
 | 3 | **错误码不够细** | `BAD_PARAM` 过于笼统，观势 skill 难以针对性处理（如区分"参数缺失"vs"参数类型错"vs"参数范围越界"） | 必须-1：扩展错误码 |
 | 4 | **分页游标不透明** | 若游标内部结构暴露（如 `date=2026-10-01;code=sh600519`），观势可能自行拼接而非透传 | 必须-3：文档明确游标不透明 |
 | 5 | **E13 三合一** | POST/PUT/GET 合在一个端点编号，OpenAPI 文档中不易发现三个操作 | 必须-14：拆分 |
-| 6 | **base_rate 的 horizon 反推** | 若不加显式列，观势 skill 消费 base_rate 时无法直接过滤 horizon | 待观势确认-2 |
+| 6 | ~~**base_rate 的 horizon 反推**~~ | ~~若不加显式列，观势 skill 消费 base_rate 时无法直接过滤 horizon~~ | ✅ 已裁决（口径1）：prediction 表加 horizon 显式列 |
 
 ---
 
@@ -313,6 +316,21 @@
 | 建议-16 | E9 | 预留 bucket_by 参数 |
 | 建议-17~24 | E10~E16 | 各端点字段增强 |
 | 建议-25 | 通用 | code_format 参数 |
+
+---
+
+## 6. 观势裁决记录（2026-10-07）
+
+以下必须项经观势裁决确认，详细口径见 `base_rate_calibration_spec.md` v1.0：
+
+| 编号 | 裁决内容 | 状态 |
+|------|---------|------|
+| 必须-9 | E8 响应字段：n_samples / hit_rate / stat_json（含 Wilson CI）/ reliability **全上** | ✅ 确认 |
+| 必须-10 | E8 `window_type` 默认 `both` 双行；消费规则：rolling_90 为决策主依据、full 为趋势参考，偏离 >15pp 标注"基率不稳" | ✅ 确认 |
+| 必须-11 | E9 响应字段：n / avg_conf_pct / hit_rate / brier；confidence_pct 取值域 0-100 整数，无额外字段 | ✅ 确认 |
+| 必须-13 | cognition_id 分配权归观势（F/C/H/M 前缀），API 不自动生成；API 仅做格式校验（`^[FCHM]-\d{3}$`）+ 重复 409 | ✅ 确认 |
+
+**冻结状态**：以上 4 项已冻结，铸码按此实装。后续变更需观势+造物双方会签。
 
 ---
 

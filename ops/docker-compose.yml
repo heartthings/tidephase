@@ -59,6 +59,7 @@ services:
       - ../configs:/app/configs:ro
       - ../dworker:/app/dworker:ro
       - ../dsched:/app/dsched:ro
+      - ../db:/app/db:ro
       - ../data/raw:/app/data/raw
     command: python -m dsched.main
     healthcheck:

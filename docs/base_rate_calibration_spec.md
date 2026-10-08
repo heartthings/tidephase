@@ -1,9 +1,12 @@
 # base_rate / calibration 口径规格书（T2.11 初稿）
 
-> 编制：造物（wuzao）| 2026-10-07 | v0.1 初稿，待观势会签
+> 编制：造物（wuzao）| 2026-10-07 | v1.0 冻结版
 > 依据：dujun-tech-proposal.md v1.2（§3.12 D12 表、§5.2 E8/E9/E13、§6.4 lovetrade 迁移、§10-Q2/Q10）+ data-layer-spec.md v2.0（M-005 基率、M-002 校准）+ guanshi-review-20261007.md
-> 状态：**初稿 · 待观势会签后冻结**。铸码 T3.1 以此为准实装。
+> 状态：**✅ 已冻结 · 观势 2026-10-07 会签裁决**。铸码 T3.1 以此为准实装。
 > 术语与方案 v1.2 保持一致，不发明新名词。
+> 
+> **变更记录**：
+> - v0.1 → v1.0：观势裁决 5 条口径 + 4 项必须项全部确认（详见 §6 裁决记录）
 
 ---
 
@@ -24,7 +27,10 @@
 
 **判定来源**：regime 由观势规则引擎在创建 prediction 时判定并写入 `regime_at_create`，base_rate 聚合作业（`j_base_rate`）从 `prediction` 表聚合，**不自行判定 regime**。分化子态标签（如有）存 `base_rate.stat_json.sub_labels`（字符串数组）。
 
-**待观势确认-1**：regime 是否需要在 base_rate 聚合时按 `sentiment_daily.sentiment_score` 或 `zt_pool` 指标做二级细分（如 trending_up + 高情绪 / trending_up + 低情绪）？当前方案仅保留 `sub_labels` 兜底，建议 V1 不做二级细分，待数据积累后 V2 再议。
+**✅ 观势裁决（口径5 · 2026-10-07）**：
+- V1 **不做** regime 二级细分（不按情绪/指标做 regime×情绪 交叉态）。
+- `sub_labels` 作为兜底机制保留，用于积累 V2 所需样本。
+- **强制写入规则**：当上证50与科创50在相同窗口期内涨幅/跌幅分化 >5pp 时，**必须**将该 prediction 的 `stat_json.sub_labels` 写入分化子态标签（如 `["divergence_sh50_vs_kc50"]`）。这是当前唯一有实证支持的子态，V1 即开始积累样本，为 V2 自动升级做准备。
 
 #### 1.1.2 category（认知/预测类别）
 
@@ -51,7 +57,7 @@
 | `T5` | 5 个交易日内 | `check_date = created_at + 5 交易日` |
 | `W1` | 1 周（5 个自然日/下一个交易日） | `check_date = created_at + 7 自然日内的首个交易日` |
 
-**待观势确认-2**：`horizon` 在 `prediction` 表中未作为显式字段存在，当前由 `check_date - created_at` 反推。建议在 `prediction` 表增加 `horizon` 列（V00X migration），避免反推歧义（如 W1 与 T5 在长节假日可能重合）。若不加列，需在聚合作业中明确反推规则并写入 `base_rate.stat_json`。
+**✅ 观势裁决（口径1 · 2026-10-07）**：`prediction` 表**增加 `horizon` 显式列**（VARCHAR, 枚举值 T1/T3/T5/W1）。通过 V00X migration 加列，`j_pred_writeback` 在创建 prediction 时根据 `check_date` 与 `created_at` 的交易日差值自动填入。理由：长假反推存在歧义（W1 与 T5 在长节假日可能重合），显式列消除歧义。
 
 ### 1.2 聚合窗口 window 语义
 
@@ -66,6 +72,10 @@ base_rate 表（`base_rate`）按 `(regime, category, horizon, window_end)` 为 
 
 **输出约定**：E8 端点 `GET /data/base_rate?regime=&category=&horizon=&window_end=latest` 默认返回最新窗口、双口径两行。若需历史窗口序列，传 `window_end` 范围。
 
+**✅ 观势裁决（必须-10 · 2026-10-07）**：
+- `window_type` 参数默认值 `both`，返回双行（rolling_90 + full）。可选值：`rolling_90` / `full` / `both`。
+- **消费规则**（观势侧）：`rolling_90` 为决策主依据，`full` 为趋势参考。当两者 hit_rate 偏离 >15pp 时，观势标注"基率不稳"，该 base_rate 不参与方向判定。
+
 ### 1.3 n / hit_rate 判定规则
 
 #### 1.3.1 样本定义
@@ -75,7 +85,8 @@ base_rate 表（`base_rate`）按 `(regime, category, horizon, window_end)` 为 
 **排除**：
 - `result = 'pending'`（未到期/未验证）——不计入 n
 - `result = 'invalid'`（人工标记无效）——不计入 n
-- `result = 'expired'`（超期未验证，§3 边界情况）——**待观势确认-3**：expired 是否计入 n 的分母？建议 V1 不计入（与 invalid 同等对待），但 `stat_json` 记录 expired 数量供审计。
+- `result = 'expired'`（超期未验证，§3 边界情况）——**不计入 n 的分母**（与 invalid 同等对待）。
+  - **✅ 观势裁决（口径2 · 2026-10-07）**：expired 不计入 base_rate / calibration 的 n 分母；`stat_json.n_expired` 保留，供观势周复盘消费 expired 率作为流程违规指标。
 
 #### 1.3.2 hit_rate 判定
 
@@ -120,7 +131,10 @@ hit_rate = COUNT(result='hit') / NULLIF(COUNT(result IN ('hit','miss')), 0)
 | `n_samples >= 20` | `"reliability": "high"` |
 | `n_samples = 0` | 不返回该行（或返回 `hit_rate: null`，`reliability: "none"`） |
 
-**待观势确认-4**：样本不足阈值（5/20）是否合适？观势规则引擎消费 base_rate 时，是否需要对 `reliability=low` 的基率做降权或拒绝使用？
+**✅ 观势裁决（口径3 · 2026-10-07）**：
+- 阈值确认：`<5` = low，`<20` = medium，`>=20` = high。
+- `reliability=low` 的 base_rate **不降权**，仅打标。hit_rate 仍正常计算并附带 Wilson 95% CI。
+- **消费侧规则**（不改本文档，观势规则引擎内部执行）：观势规则引擎对 `reliability=low` 的 `base_rate` 仅作框架说明参考，**不作方向依据**。即 low 基率不参与趋势方向判定，仅在认知库描述中引用。
 
 ---
 
@@ -160,6 +174,7 @@ GROUP BY 1, 2;
 - `prediction.confidence_pct`：`INT NOT NULL CHECK (confidence_pct BETWEEN 0 AND 100)`
 - 语义：观势创建 prediction 时对该预测的主观置信度（百分比整数）
 - 与 `cognition.confidence`（DOUBLE PRECISION, 0-1）不同——cognition 是认知的置信度（0-1 浮点），prediction 是预测的置信度（0-100 整数）。**两者不混用，calibration 只消费 prediction.confidence_pct**。
+- **✅ 观势裁决（必须-11 · 2026-10-07）**：`confidence_pct` 取值域确认为 **0-100 整数**，无额外字段。E9 返回 `avg_conf_pct` 为浮点（AVG 结果），其余字段 `n` / `hit_rate` / `brier` 如 §2.1 定义。
 
 ### 2.3 Brier 分数公式
 
@@ -187,9 +202,9 @@ BS = (1/N) * Σ(p_i - o_i)²
 | **5 档**（建议 V2 默认） | [0,20), [20,40), [40,60), [60,80), [80,100] | ≥10/桶 | 样本量少时更稳健 |
 | 十分桶 | [0,10), [10,20), ..., [90,100] | ≥5/桶 | 样本量充足时更精细 |
 
-**V1 建议**：保持按月分桶（与方案 v1.2 一致），在 `E9 /calibration` 端点增加 `bucket_by=month|confidence` 参数，V1 仅实现 `month`，`confidence` 分桶待数据积累后 V2 开放。
-
-**待观势确认-5**：V1 是否接受仅按月分桶？calibration 的消费场景是否需要按 confidence 分桶绘制校准曲线？
+**✅ 观势裁决（口径4 · 2026-10-07）**：
+- **V1**：保持按月分桶（与方案 v1.2 一致）。`E9 /calibration` 端点预留 `bucket_by=month|confidence` 参数，V1 仅实现 `month`。
+- **V2 confidence 分桶自动升级规则**：当任一 confidence 档（5 档：[0,20), [20,40), [40,60), [60,80), [80,100]）的样本量 **≥20** 时，自动升级为按 confidence 分桶模式，**无需再评审**。铸码在 V2 迭代中实现此自动检测逻辑（`j_calibration` 作业在每次运行时检查各档样本量，满足条件即切换）。
 
 ### 2.5 窗口滚动语义
 
@@ -260,15 +275,15 @@ lovetrade MySQL `catalyst_impacts` / `catalyst_predictions` / `catalyst_system_s
 
 ---
 
-## 5. 待观势拍板清单（汇总）
+## 5. 口径裁决记录（已全部冻结 ✅）
 
-| # | 问题 | 当前默认值 | 影响范围 |
-|---|------|-----------|---------|
-| 1 | regime 是否需要二级细分（如 trending_up + 高情绪） | V1 不做，`sub_labels` 兜底 | base_rate 粒度 |
-| 2 | prediction 表是否增加 `horizon` 显式列 | 不加，由 check_date - created_at 反推 | DDL / migration |
-| 3 | expired 是否计入 base_rate n 的分母 | 不计入 | hit_rate 计算 |
-| 4 | 样本不足阈值（5/20）是否合适 | 5=low, 20=high | E8 输出 |
-| 5 | V1 calibration 是否接受仅按月分桶 | 按月，V2 加 confidence 分桶 | E9 / calibration_view |
+| # | 问题 | 裁决结果 | 裁决日期 | 影响范围 |
+|---|------|---------|---------|---------|
+| 1（口径1） | prediction 表是否增加 `horizon` 显式列 | ✅ **加列**（VARCHAR, T1/T3/T5/W1）。V00X migration。理由：长假反推歧义是真实风险 | 2026-10-07 | DDL / migration / j_pred_writeback |
+| 2（口径2） | expired 是否计入 base_rate n 的分母 | ✅ **不计入**。`stat_json.n_expired` 保留供审计（观势周复盘消费 expired 率作流程违规指标） | 2026-10-07 | hit_rate 计算 / stat_json |
+| 3（口径3） | 样本不足阈值（5/20）及 reliability=low 处理 | ✅ 阈值确认 5/20。low **不降权**，仅打标。消费侧：low 基率仅作框架说明参考，不作方向依据 | 2026-10-07 | E8 输出 / 观势规则引擎 |
+| 4（口径4） | V1 calibration 分桶策略 | ✅ V1 按月分桶。V2 confidence 5 档分桶触发条件：任一档样本 ≥20 自动升级，无需再评审 | 2026-10-07 | E9 / calibration_view / j_calibration |
+| 5（口径5） | regime 是否需要二级细分 | ✅ V1 **不做**二级细分。但**分化子态强制写入 sub_labels**：上证50 vs 科创50 分化 >5pp 时必须写入 `["divergence_sh50_vs_kc50"]` | 2026-10-07 | base_rate.stat_json.sub_labels |
 
 ---
 
@@ -278,10 +293,60 @@ lovetrade MySQL `catalyst_impacts` / `catalyst_predictions` / `catalyst_system_s
 |-----------|------------------|----------|
 | regime 枚举 | `base_rate.regime` / `prediction.regime_at_create` | ✅ 一致 |
 | category 枚举 | `prediction.category` | ✅ 一致（7 枚举，§10-Q2 冻结） |
-| horizon 枚举 | 无显式列，由 check_date 反推 | ⚠️ 待确认是否加列 |
+| horizon 枚举 | ~~无显式列~~ → **`prediction.horizon` VARCHAR**（口径1 裁决加列） | ✅ 已对齐 |
 | hit_rate | `base_rate.hit_rate` | ✅ 一致 |
 | n_samples | `base_rate.n_samples` | ✅ 一致 |
 | brier | `calibration_view.brier` | ✅ 公式一致 |
 | confidence_pct 域 | `prediction.confidence_pct INT 0-100` | ✅ 一致 |
 | falsify 判定 | `prediction.falsify JSONB` + `j_pred_writeback` | ✅ 一致（§10-Q10） |
 | 人工改判优先 | `PUT /prediction/{id}/result` | ✅ 一致（§10-Q10） |
+
+---
+
+## 附录 C：必须项裁决记录（api_contract_review.md 关联）
+
+以下 4 项来自 `api_contract_review.md` 必须项，经观势 2026-10-07 裁决确认：
+
+### 必须-9：E8 响应字段补齐 ✅
+
+E8 `GET /data/base_rate` 响应必须包含：
+- `n_samples`（INT）：已判定样本数（hit + miss，不含 pending/invalid/expired）
+- `hit_rate`（FLOAT, 0-1）：命中率
+- `stat_json`（JSONB）：含 `n_hit`, `n_miss`, `n_expired`, `n_pending`, `hit_rate`, `wilson_ci_95`（Wilson 95% CI 数组 [lower, upper]）, `sub_labels`（字符串数组）
+- `reliability`（VARCHAR）：`low` / `medium` / `high` / `none`（按 §1.4 阈值）
+
+### 必须-10：E8 双口径默认返回 ✅
+
+- `window_type` 参数默认 `both`，返回双行（`rolling_90` + `full`）
+- 消费规则（观势侧）：rolling_90 为决策主依据，full 为趋势参考
+- 两者 hit_rate 偏离 >15pp 时，观势标注"基率不稳"
+
+### 必须-11：E9 响应字段补齐 ✅
+
+E9 `GET /calibration` 响应必须包含：
+- `n`（INT）：该月该类别已判定 prediction 数
+- `avg_conf_pct`（FLOAT）：平均置信度
+- `hit_rate`（FLOAT, 0-1）：实际命中率
+- `brier`（FLOAT, 0-1）：Brier 分数
+- `confidence_pct` 取值域确认：**0-100 整数**，无额外字段
+
+### 必须-13：cognition_id 分配权归观势 ✅
+
+- `cognition_id` 分配权归观势（F/C/H/M 前缀编号），API **不自动生成**
+- API 职责：
+  - **格式校验**：`^[FCHM]-\d{3}$`（正则），不符合返回 `BAD_PARAM`
+  - **重复检测**：cognition_id 已存在且 version=1 时返回 `409 CONFLICT`
+- 编号序列管理由观势认知库内部维护，API 不参与序列分配
+
+---
+
+## 附录 D：冻结签名
+
+| 角色 | Agent | 状态 | 日期 |
+|------|-------|------|------|
+| 文档编制 | 造物（wuzao） | ✅ 已更新 | 2026-10-07 |
+| 口径裁决 | 观势（guanshi） | ✅ 5 口径 + 4 必须项全部确认 | 2026-10-07 |
+| 待实装 | 铸码 | ⏳ T3.1 以此为准 | — |
+| 待验证 | 墨测 | ⏳ 验收以此为准 | — |
+
+**冻结范围**：`base_rate_calibration_spec.md` v1.0 全部 5 章 + 4 附录。后续变更需观势+造物双方会签。

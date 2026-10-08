@@ -109,6 +109,7 @@ def _query_api(endpoint: str, params: dict = None) -> Optional[dict]:
 def get_trade_dates(conn, start: date, end: date) -> List[date]:
     """获取区间内交易日列表（CN 市场 is_open=1）。"""
     rows = _query_pg(
+        conn,
         "SELECT cal_date FROM trade_cal "
         "WHERE market='CN' AND is_open=1 AND cal_date BETWEEN %s AND %s "
         "ORDER BY cal_date",
@@ -120,6 +121,7 @@ def get_trade_dates(conn, start: date, end: date) -> List[date]:
 def get_instrument_count(conn, trade_date: date) -> int:
     """获取某交易日在市证券数量（stock）。"""
     rows = _query_pg(
+        conn,
         "SELECT COUNT(*) FROM instrument_master "
         "WHERE inst_type='stock' AND status='active' "
         "AND (list_date IS NULL OR list_date <= %s) "
@@ -132,6 +134,7 @@ def get_instrument_count(conn, trade_date: date) -> int:
 def get_stock_actual_count(conn, trade_date: date) -> int:
     """获取 stock_daily 某日实际行数。"""
     rows = _query_pg(
+        conn,
         "SELECT COUNT(*) FROM stock_daily WHERE date = %s",
         (trade_date,),
     )
@@ -141,6 +144,7 @@ def get_stock_actual_count(conn, trade_date: date) -> int:
 def get_index_actual_count(conn, trade_date: date) -> int:
     """获取 index_daily 某日实际行数。"""
     rows = _query_pg(
+        conn,
         "SELECT COUNT(*) FROM index_daily WHERE date = %s",
         (trade_date,),
     )
@@ -150,6 +154,7 @@ def get_index_actual_count(conn, trade_date: date) -> int:
 def get_index_missing_codes(conn, trade_date: date) -> List[str]:
     """获取 index_daily 某日缺失的指数代码。"""
     rows = _query_pg(
+        conn,
         "SELECT im.code FROM instrument_master im "
         "WHERE im.inst_type='index' AND im.status='active' "
         "AND im.code IN %s "

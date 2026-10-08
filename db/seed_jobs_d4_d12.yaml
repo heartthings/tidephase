@@ -1,0 +1,134 @@
+# D4-D12 新表采集作业（Z4b 补充注册）
+# 盘中作业 enabled=false（等开市验证后启用）
+
+jobs:
+  # D4 融资融券
+  - job_name: j_margin_daily
+    domain: D4
+    target_tables: [margin_daily, margin_stock]
+    schedule_cron: "0 17 * * 1-5"
+    source_chain: ["akshare", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "融资融券日终 17:00（交易所16:30发布）"
+
+  # D5 资金流向
+  - job_name: j_fund_flow
+    domain: D5
+    target_tables: [fund_flow_stock, fund_flow_sector]
+    schedule_cron: "20 15 * * 1-5"
+    source_chain: ["eastmoney", "akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 900
+    critical: false
+    enabled: true
+    note: "个股+板块资金流向 15:20"
+
+  # D6 板块（持续采集，lovetrade迁移提供历史）
+  - job_name: j_sector_daily
+    domain: D6
+    target_tables: [sector_daily, theme_heat]
+    schedule_cron: "25 15 * * 1-5"
+    source_chain: ["eastmoney", "akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "板块日K+题材热度 15:25"
+
+  # D8 公告/分红/财报
+  - job_name: j_announcements
+    domain: D8
+    target_tables: [announcements]
+    schedule_cron: "0 18 * * 1-5"
+    source_chain: ["eastmoney", "cninfo"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 1200
+    critical: false
+    enabled: true
+    note: "公告采集 18:00"
+
+  - job_name: j_corporate_actions
+    domain: D8
+    target_tables: [dividend, earnings_calendar, lockup_calendar]
+    schedule_cron: "0 9 * * 1-5"
+    source_chain: ["akshare", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "分红/财报日历/解禁 09:00"
+
+  # D9 股东/持股
+  - job_name: j_holder_num
+    domain: D9
+    target_tables: [holder_num, share_structure]
+    schedule_cron: "0 18 * * 1-5"
+    source_chain: ["akshare", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "股东人数+股本结构 18:00（季报后更新）"
+
+  # D10 新闻（持续采集，lovetrade迁移提供历史）
+  - job_name: j_news_feed
+    domain: D10
+    target_tables: [news_telegraph, market_messages]
+    schedule_cron: "*/5 8-16 * * 1-5"
+    source_chain: ["eastmoney", "cls"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 120
+    critical: true
+    enabled: false
+    note: "盘中新闻流 5min间隔；盘中作业，开市后启用"
+
+  # D11 龙虎榜/大宗交易（j_bidding_list 已存在）
+  - job_name: j_block_trade
+    domain: D11
+    target_tables: [block_trade]
+    schedule_cron: "30 17 * * 1-5"
+    source_chain: ["eastmoney", "akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: false
+    enabled: true
+    note: "大宗交易 17:30"
+
+  # D12 预测/认知（lovetrade迁移提供历史，后续由催化雷达同步）
+  - job_name: j_prediction_sync
+    domain: D12
+    target_tables: [prediction, cognition]
+    schedule_cron: "0 8 * * 1-5"
+    source_chain: ["lovetrade-api"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: false
+    enabled: false
+    note: "催化雷达预测同步 08:00；需lovetrade API token，待启用"
+
+  # 估值/财务快照
+  - job_name: j_valuation
+    domain: auxiliary
+    target_tables: [valuation_daily, finance_snapshot, financial_reports]
+    schedule_cron: "0 19 * * 1-5"
+    source_chain: ["akshare", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 900
+    critical: false
+    enabled: true
+    note: "估值+财务快照 19:00"
+
+  # 宏观指标
+  - job_name: j_macro_indicators
+    domain: auxiliary
+    target_tables: [macro_indicators, policy_calendar]
+    schedule_cron: "0 8 1,15 * *"
+    source_chain: ["akshare"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "宏观指标 每月1/15日更新"
