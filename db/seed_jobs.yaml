@@ -129,12 +129,12 @@ jobs:
     domain: D3
     target_tables: [bidding_list]
     schedule_cron: "26 9 * * 1-5"
-    source_chain: ["eastmoney"]
-    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
-    timeout_s: 300
+    source_chain: ["tencent", "eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [2, 5, 10]}
+    timeout_s: 600
     critical: false
     enabled: false
-    note: "竞价列表09:26终版；龙虎MorningBiddingList待Z2 T-R1后启用"
+    note: "竞价列表09:26终版；主源tencent(整改2026-10-09)，备源eastmoney；龙虎MorningBiddingList待Z2 T-R1后启用"
 
   - job_name: j_stock_minute
     domain: D2
