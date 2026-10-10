@@ -7,7 +7,7 @@
 
 ## P0-1 T3.1 base_rate 聚合作业实装
 
-### 状态：🔄 进行中
+### 状态：✅ 完成 (commit e643b33)
 
 ### 地面真相（督军 21:05-21:25 实测 + 铸码确认）
 - prediction: 344 行（72 hit / 0 miss / 271 pending / 1 expired）

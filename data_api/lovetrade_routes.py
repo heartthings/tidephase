@@ -23,7 +23,7 @@ import psycopg2
 import psycopg2.extras
 import yaml
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 logger = logging.getLogger("data-api.lovetrade")
@@ -69,8 +69,13 @@ def get_writer_conn():
 
 
 def envelope(data, rows=None):
+    """Java 兼容响应格式: {code: 0, data: ..., message: 'ok'}
+    web 端 isBackendSuccess 检查 code === '0'; transformBackendResponse 提取 data.
+    """
     return {
+        "code": 0,
         "data": data,
+        "message": "ok",
         "meta": {
             "rows": rows or (len(data) if isinstance(data, list) else 1),
             "server_ts": datetime.now(TZ_CST).isoformat(),
@@ -98,7 +103,7 @@ def verify_token_from_header(authorization: str) -> str:
 
 # ─── Catalyst 组 ─────────────────────────────────────────────────────
 
-@router.get("/data/catalyst/impacts")
+@router.get("/api/catalyst/impacts")
 async def catalyst_impacts_list(
     date_from: str = None, date_to: str = None,
     message_type: str = None, lifecycle_stage: str = None,
@@ -126,7 +131,7 @@ async def catalyst_impacts_list(
     return envelope(rows)
 
 
-@router.get("/data/catalyst/impacts/{impact_id}")
+@router.get("/api/catalyst/impacts/{impact_id}")
 async def catalyst_impact_get(impact_id: str, authorization: str = None):
     """单个 impact 详情"""
     conn = get_reader_conn()
@@ -139,7 +144,7 @@ async def catalyst_impact_get(impact_id: str, authorization: str = None):
     return envelope(dict(row))
 
 
-@router.get("/data/catalyst/predictions")
+@router.get("/api/catalyst/predictions")
 async def catalyst_predictions_list(
     status: str = None, category: str = None,
     limit: int = Query(default=100, le=1000),
@@ -166,7 +171,7 @@ async def catalyst_predictions_list(
     return envelope(rows)
 
 
-@router.get("/data/catalyst/predictions/{prediction_id}")
+@router.get("/api/catalyst/predictions/{prediction_id}")
 async def catalyst_prediction_get(prediction_id: str, authorization: str = None):
     """单个 prediction 详情"""
     conn = get_reader_conn()
@@ -179,7 +184,7 @@ async def catalyst_prediction_get(prediction_id: str, authorization: str = None)
     return envelope(dict(row))
 
 
-@router.get("/data/catalyst/system-states")
+@router.get("/api/catalyst/system-states")
 async def catalyst_system_states_list(
     limit: int = Query(default=50, le=500),
     authorization: str = None,
@@ -196,7 +201,7 @@ async def catalyst_system_states_list(
     return envelope(rows)
 
 
-@router.get("/data/catalyst/system-states/{state_id}")
+@router.get("/api/catalyst/system-states/{state_id}")
 async def catalyst_system_state_get(state_id: str, authorization: str = None):
     """单个 system_state 详情"""
     conn = get_reader_conn()
@@ -209,7 +214,7 @@ async def catalyst_system_state_get(state_id: str, authorization: str = None):
     return envelope(dict(row))
 
 
-@router.get("/data/catalyst/active-messages")
+@router.get("/api/catalyst/active-messages")
 async def catalyst_active_messages_list(
     is_active: bool = True,
     limit: int = Query(default=100, le=500),
@@ -230,7 +235,7 @@ async def catalyst_active_messages_list(
     return envelope(rows)
 
 
-@router.get("/data/catalyst/accuracy")
+@router.get("/api/catalyst/accuracy")
 async def catalyst_accuracy(
     category: str = None,
     horizon: str = None,
@@ -261,7 +266,7 @@ async def catalyst_accuracy(
     return envelope(rows)
 
 
-@router.get("/data/catalyst/dashboard")
+@router.get("/api/catalyst/dashboard")
 async def catalyst_dashboard(authorization: str = None):
     """catalyst 聚合看板"""
     conn = get_reader_conn()
@@ -295,7 +300,7 @@ async def catalyst_dashboard(authorization: str = None):
 
 # ─── Topic 组 ─────────────────────────────────────────────────────────
 
-@router.get("/data/topic/tree")
+@router.get("/api/topic/tree")
 async def topic_tree(authorization: str = None):
     """题材树形结构（topic → topic_category 层级）"""
     conn = get_reader_conn()
@@ -320,7 +325,7 @@ async def topic_tree(authorization: str = None):
     return envelope(topics)
 
 
-@router.get("/data/topic/graph")
+@router.get("/api/topic/graph")
 async def topic_graph(authorization: str = None):
     """题材关联图谱（nodes + edges）"""
     conn = get_reader_conn()
@@ -334,7 +339,7 @@ async def topic_graph(authorization: str = None):
     return envelope({"nodes": nodes, "edges": edges})
 
 
-@router.get("/data/topic/intro/{topic_id}")
+@router.get("/api/topic/intro/{topic_id}")
 async def topic_intro(topic_id: str, authorization: str = None):
     """题材详情（含 AI 解析）"""
     conn = get_reader_conn()
@@ -355,7 +360,7 @@ async def topic_intro(topic_id: str, authorization: str = None):
     return envelope(result)
 
 
-@router.get("/data/topic/category-stocks/{category_id}")
+@router.get("/api/topic/category-stocks/{category_id}")
 async def topic_category_stocks(category_id: str, authorization: str = None):
     """题材分类下的个股列表（从 stock_sector_map 查）"""
     conn = get_reader_conn()
@@ -370,7 +375,7 @@ async def topic_category_stocks(category_id: str, authorization: str = None):
 
 # ─── Market 组 ────────────────────────────────────────────────────────
 
-@router.get("/data/market/radars")
+@router.get("/api/market/radars")
 async def market_radars(
     date: str = None,
     limit: int = Query(default=100, le=1000),
@@ -392,7 +397,7 @@ async def market_radars(
     return envelope(rows)
 
 
-@router.get("/data/market/messages")
+@router.get("/api/market/messages")
 async def market_messages(
     date: str = None,
     limit: int = Query(default=100, le=1000),
@@ -414,7 +419,7 @@ async def market_messages(
     return envelope(rows)
 
 
-@router.get("/data/market/dynamic-news")
+@router.get("/api/market/dynamic-news")
 async def market_dynamic_news(
     date: str = None,
     limit: int = Query(default=100, le=1000),
@@ -436,7 +441,7 @@ async def market_dynamic_news(
     return envelope(rows)
 
 
-@router.get("/data/market/plate-movements")
+@router.get("/api/market/plate-movements")
 async def plate_movements(
     date: str = None, freq: str = "daily",
     limit: int = Query(default=100, le=1000),
@@ -467,7 +472,7 @@ async def plate_movements(
     return envelope(rows)
 
 
-@router.get("/data/market/interval-stats")
+@router.get("/api/market/interval-stats")
 async def market_interval_stats(
     date: str = None,
     authorization: str = None,
@@ -493,7 +498,7 @@ async def market_interval_stats(
     return envelope(rows)
 
 
-@router.get("/data/market/daily-metrics")
+@router.get("/api/market/daily-metrics")
 async def market_daily_metrics(
     date: str = None,
     authorization: str = None,
@@ -517,7 +522,7 @@ async def market_daily_metrics(
 
 # ─── Note 组 ──────────────────────────────────────────────────────────
 
-@router.get("/data/notes")
+@router.get("/api/note/list")
 async def notes_list(
     category_id: str = None,
     limit: int = Query(default=50, le=200),
@@ -540,7 +545,7 @@ async def notes_list(
     return envelope(rows)
 
 
-@router.get("/data/notes/{note_id}")
+@router.get("/api/note/{note_id}")
 async def note_get(note_id: str, authorization: str = None):
     """笔记详情"""
     conn = get_reader_conn()
@@ -560,7 +565,7 @@ class NoteCreate(BaseModel):
     tags: Optional[str] = None
 
 
-@router.post("/data/notes")
+@router.post("/api/note")
 async def note_create(note: NoteCreate, authorization: str = None):
     """创建笔记"""
     conn = get_writer_conn()
@@ -574,7 +579,7 @@ async def note_create(note: NoteCreate, authorization: str = None):
     return envelope({"id": note_id, "created": True})
 
 
-@router.get("/data/note-categories")
+@router.get("/api/note/category/enabled")
 async def note_categories_list(authorization: str = None):
     """笔记分类列表"""
     conn = get_reader_conn()
@@ -587,7 +592,7 @@ async def note_categories_list(authorization: str = None):
 
 # ─── Report 组 ────────────────────────────────────────────────────────
 
-@router.get("/data/reports")
+@router.get("/api/reports")
 async def reports_list(
     type: str = None, date: str = None,
     limit: int = Query(default=20, le=100),
@@ -612,7 +617,7 @@ async def reports_list(
     return envelope(rows)
 
 
-@router.get("/data/reports/{report_id}")
+@router.get("/api/reports/{report_id}")
 async def report_get(report_id: str, authorization: str = None):
     """报告详情"""
     conn = get_reader_conn()
@@ -625,7 +630,7 @@ async def report_get(report_id: str, authorization: str = None):
     return envelope(dict(row))
 
 
-@router.post("/data/reports/{report_type}/send")
+@router.post("/api/reports/{report_type}/send")
 async def report_send(report_type: str, authorization: str = None):
     """发送报告到飞书 webhook（morning/evening）"""
     secrets = load_secrets()
@@ -671,7 +676,7 @@ async def report_send(report_type: str, authorization: str = None):
 
 # ─── Calendar 组 ──────────────────────────────────────────────────────
 
-@router.get("/meta/calendar/is-trading-day")
+@router.get("/api/meta/calendar/is-trading-day")
 async def calendar_is_trading_day(date: str = None, authorization: str = None):
     """判断是否交易日"""
     check_date = date or datetime.now(TZ_CST).strftime("%Y-%m-%d")
@@ -686,7 +691,7 @@ async def calendar_is_trading_day(date: str = None, authorization: str = None):
     return envelope({"date": check_date, "is_trading_day": row["is_open"] == 1})
 
 
-@router.get("/meta/calendar/trading-session")
+@router.get("/api/meta/calendar/trading-session")
 async def calendar_trading_session(authorization: str = None):
     """当前交易时段判断"""
     now = datetime.now(TZ_CST)
@@ -708,7 +713,7 @@ async def calendar_trading_session(authorization: str = None):
     })
 
 
-@router.get("/meta/calendar/month-trading-days")
+@router.get("/api/meta/calendar/month-trading-days")
 async def calendar_month_trading_days(year: int = None, month: int = None, authorization: str = None):
     """月度交易日列表"""
     now = datetime.now(TZ_CST)
@@ -728,7 +733,7 @@ async def calendar_month_trading_days(year: int = None, month: int = None, autho
 
 # ─── Home Summary ─────────────────────────────────────────────────────
 
-@router.get("/data/home/summary")
+@router.get("/api/home/summary")
 async def home_summary(authorization: str = None):
     """首页聚合摘要"""
     conn = get_reader_conn()
@@ -768,7 +773,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-@router.post("/auth/login")
+@router.post("/api/user/login")
 async def auth_login(req: LoginRequest):
     """用户名密码登录 → 返回 bearer token"""
     secrets = load_secrets()
@@ -793,3 +798,294 @@ async def auth_login(req: LoginRequest):
                 return envelope({"token": token, "role": role, "username": req.username})
 
     raise HTTPException(status_code=401, detail={"code": "AUTH", "msg": "Invalid credentials"})
+
+
+# ─── Web 兼容端点（Z9A 补全） ────────────────────────────────────────
+
+@router.get("/api/note/count/month")
+async def note_count_month(
+    month: str = None,
+    authorization: str = None,
+):
+    """按月统计笔记数（web NOTE_URLS.COUNT_MONTH）"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        if month:
+            cur.execute("""
+                SELECT date_trunc('month', created_time)::date AS date, COUNT(*) AS count
+                FROM trading_note
+                WHERE date_trunc('month', created_time)::date = %s::date
+                GROUP BY 1 ORDER BY 1
+            """, (f"{month}-01",))
+        else:
+            cur.execute("""
+                SELECT date_trunc('month', created_time)::date AS date, COUNT(*) AS count
+                FROM trading_note
+                GROUP BY 1 ORDER BY 1 DESC LIMIT 12
+            """)
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
+
+
+@router.post("/api/note/{note_id}/top")
+async def note_top(note_id: str, authorization: str = None):
+    """置顶/取消置顶笔记（web NOTE_URLS.TOP）"""
+    conn = get_writer_conn()
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE trading_note SET is_top = NOT COALESCE(is_top, false), updated_time = now()
+            WHERE id = %s RETURNING id
+        """, (note_id,))
+        updated = cur.fetchone()
+    conn.commit()
+    conn.close()
+    if not updated:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return envelope(True)
+
+
+@router.put("/api/note")
+async def note_update(request: Request, authorization: str = None):
+    """更新笔记（web note.ts updateNote）"""
+    body = await request.json()
+    note_id = body.get("id")
+    if not note_id:
+        raise HTTPException(status_code=400, detail="id is required")
+    conn = get_writer_conn()
+    with conn.cursor() as cur:
+        sets = ["updated_time = now()"]
+        params = []
+        for field in ("category_id", "title", "content", "tags"):
+            if field in body:
+                sets.append(f"{field} = %s")
+                params.append(body[field])
+        if len(sets) <= 1:
+            conn.close()
+            return envelope(False)
+        params.append(note_id)
+        cur.execute(f"UPDATE trading_note SET {', '.join(sets)} WHERE id = %s RETURNING id", params)
+        updated = cur.fetchone()
+    conn.commit()
+    conn.close()
+    return envelope(bool(updated))
+
+
+@router.delete("/api/note/{note_id}")
+async def note_delete(note_id: str, authorization: str = None):
+    """删除笔记（web note.ts deleteNote）"""
+    conn = get_writer_conn()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM trading_note WHERE id = %s RETURNING id", (note_id,))
+        deleted = cur.fetchone()
+    conn.commit()
+    conn.close()
+    return envelope(bool(deleted))
+
+
+@router.get("/api/user/personal")
+async def user_personal(authorize: str = None):
+    """获取当前用户信息（web AUTH_URLS.GET_USER_INFO）"""
+    # Simplified: return a default user profile
+    return envelope({
+        "userId": "1",
+        "userName": "admin",
+        "roles": ["R_SUPER"],
+        "avatar": "",
+    })
+
+
+@router.post("/api/auth/refreshToken")
+async def auth_refresh_token(request: Request):
+    """刷新 token（web AUTH_URLS.REFRESH_TOKEN）"""
+    body = await request.json()
+    refresh_token = body.get("refreshToken", "")
+    # For now, return the same read token (simplified)
+    secrets = load_secrets()
+    api_cfg = secrets.get("api", {})
+    return envelope({
+        "token": api_cfg.get("bearer_token_read", ""),
+        "refreshToken": refresh_token,
+    })
+
+
+@router.get("/api/route/getConstantRoutes")
+async def route_get_constant(authorization: str = None):
+    """获取常量路由（web ROUTE_URLS）"""
+    # Return static route config - web uses VITE_AUTH_ROUTE_MODE=static
+    return envelope([])
+
+
+@router.get("/api/route/getReactUserRoutes")
+async def route_get_user_routes(authorization: str = None):
+    """获取用户路由（web ROUTE_URLS）"""
+    return envelope({"routes": [], "home": "/home"})
+
+
+@router.get("/api/route/isRouteExist")
+async def route_is_exist(routeName: str = None, authorization: str = None):
+    """路由是否存在检查"""
+    return envelope(True)
+
+
+# ─── Trading System 组（web TRADING_SYSTEM_URLS） ────────────────────
+
+@router.get("/api/trading-system/tree")
+async def trading_system_tree(authorization: str = None):
+    """交易系统节点树"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT id, parent_id, name, description, node_type, sort_order, color,
+                   created_time, updated_time
+            FROM trading_system_node
+            ORDER BY sort_order, created_time
+        """)
+        nodes = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    # Build tree
+    node_map = {}
+    roots = []
+    for n in nodes:
+        n["children"] = []
+        node_map[n["id"]] = n
+    for n in nodes:
+        pid = n.get("parent_id")
+        if pid and pid in node_map:
+            node_map[pid]["children"].append(n)
+        else:
+            roots.append(n)
+    return envelope(roots)
+
+
+@router.get("/api/trading-system/node/{node_id}")
+async def trading_system_node_get(node_id: str, authorization: str = None):
+    """单个节点详情"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM trading_system_node WHERE id = %s", (node_id,))
+        row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Node not found")
+    return envelope(dict(row))
+
+
+@router.post("/api/trading-system/node")
+async def trading_system_node_create(request: Request, authorization: str = None):
+    """创建节点"""
+    body = await request.json()
+    node_id = f"tsn_{datetime.now(TZ_CST).strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}"
+    conn = get_writer_conn()
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO trading_system_node (id, parent_id, name, description, node_type, sort_order, color)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
+            node_id, body.get("parentId"), body.get("name", ""),
+            body.get("description", ""), body.get("nodeType", "default"),
+            body.get("sortOrder", 0), body.get("color"),
+        ))
+    conn.commit()
+    conn.close()
+    return envelope({"id": node_id})
+
+
+@router.put("/api/trading-system/node/{node_id}")
+async def trading_system_node_update(node_id: str, request: Request, authorization: str = None):
+    """更新节点"""
+    body = await request.json()
+    conn = get_writer_conn()
+    with conn.cursor() as cur:
+        sets = ["updated_time = now()"]
+        params = []
+        for field, col in [("name", "name"), ("description", "description"),
+                           ("parentId", "parent_id"), ("sortOrder", "sort_order"),
+                           ("color", "color")]:
+            if field in body:
+                sets.append(f"{col} = %s")
+                params.append(body[field])
+        params.append(node_id)
+        cur.execute(f"UPDATE trading_system_node SET {', '.join(sets)} WHERE id = %s RETURNING id", params)
+        updated = cur.fetchone()
+    conn.commit()
+    conn.close()
+    if not updated:
+        raise HTTPException(status_code=404, detail="Node not found")
+    return envelope({"id": node_id})
+
+
+@router.delete("/api/trading-system/node/{node_id}")
+async def trading_system_node_delete(node_id: str, authorization: str = None):
+    """删除节点"""
+    conn = get_writer_conn()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM trading_system_node WHERE id = %s RETURNING id", (node_id,))
+        deleted = cur.fetchone()
+    conn.commit()
+    conn.close()
+    return envelope(bool(deleted))
+
+
+# ─── System Manage 组（web SYSTEM_MANAGE_URLS · 简化桩） ─────────────
+
+@router.get("/api/systemManage/getRoleList")
+async def system_get_role_list(authorization: str = None):
+    """角色列表（桩）"""
+    return envelope({"list": [{"id": "1", "roleName": "admin", "roleCode": "R_SUPER", "status": 1}], "total": 1})
+
+
+@router.get("/api/systemManage/getAllRoles")
+async def system_get_all_roles(authorization: str = None):
+    """所有启用角色（桩）"""
+    return envelope([{"id": "1", "roleName": "admin", "roleCode": "R_SUPER"}])
+
+
+@router.get("/api/systemManage/getUserList")
+async def system_get_user_list(authorization: str = None):
+    """用户列表（桩）"""
+    return envelope({"list": [{"id": "1", "userName": "admin", "status": 1}], "total": 1})
+
+
+@router.get("/api/systemManage/getMenuList/v2")
+async def system_get_menu_list(authorization: str = None):
+    """菜单列表（桩）"""
+    return envelope([])
+
+
+@router.get("/api/systemManage/getAllPages")
+async def system_get_all_pages(authorization: str = None):
+    """所有页面（桩）"""
+    return envelope([])
+
+
+@router.get("/api/systemManage/getMenuTree")
+async def system_get_menu_tree(authorization: str = None):
+    """菜单树（桩）"""
+    return envelope([])
+
+
+# ─── Public Catalyst 组（web PUBLIC_CATALYST_URLS · 免鉴权） ─────────
+
+@router.get("/api/public/catalyst/dashboard")
+async def public_catalyst_dashboard():
+    """公开看板（免鉴权，X-Public-Token 验证由 nginx/网关层做）"""
+    return await catalyst_dashboard()
+
+
+@router.get("/api/public/catalyst/impacts")
+async def public_catalyst_impacts(
+    date_from: str = None, date_to: str = None,
+    limit: int = Query(default=100, le=1000),
+):
+    return await catalyst_impacts_list(date_from=date_from, date_to=date_to, limit=limit)
+
+
+@router.get("/api/public/catalyst/system-states")
+async def public_catalyst_system_states(limit: int = Query(default=50, le=500)):
+    return await catalyst_system_states_list(limit=limit)
+
+
+@router.get("/api/public/catalyst/active-messages")
+async def public_catalyst_active_messages(limit: int = Query(default=100, le=500)):
+    return await catalyst_active_messages_list(limit=limit)
