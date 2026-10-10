@@ -711,6 +711,163 @@ async def prediction_due(
 # ─── E19 /docs + /openapi.json ────────────────────────────────────────
 # 由 FastAPI 自动生成
 
+# ─── Z7b 反思层端点 (V004) ────────────────────────────────────────────
+# POST /reflection · GET /reflection/recent · GET /reflection/action_items
+# 依据: cognition/README.md §8 + specs/architecture-master.md §7
+
+VALID_QUADRANTS = {'right_right', 'right_luck', 'wrong_right', 'wrong_wrong'}
+VALID_ERROR_STAGES = {'regime', 'cognition_ref', 'data_premise', 'expression', 'capability_circle', 'noise'}
+VALID_LESSON_KINDS = {'candidate_cognition', 'rule_revision', 'none'}
+VALID_ACTION_STATUSES = {'open', 'done', 'waived'}
+
+
+def _validate_reflection_record(rec: dict) -> Optional[JSONResponse]:
+    """校验单条反思记录字段，返回 None=通过，否则返回 error JSONResponse。"""
+    did = rec.get("decision_id")
+    if not did:
+        return error_response("BAD_PARAM", "'decision_id' is required", 400)
+    quad = rec.get("quadrant")
+    if quad is not None and quad not in VALID_QUADRANTS:
+        return error_response("REF_ENUM", f"quadrant must be one of {sorted(VALID_QUADRANTS)}, got '{quad}'", 400)
+    es = rec.get("error_stage")
+    if es is not None and es not in VALID_ERROR_STAGES:
+        return error_response("REF_ENUM", f"error_stage must be one of {sorted(VALID_ERROR_STAGES)}, got '{es}'", 400)
+    lk = rec.get("lesson_kind")
+    if lk is not None and lk not in VALID_LESSON_KINDS:
+        return error_response("REF_ENUM", f"lesson_kind must be one of {sorted(VALID_LESSON_KINDS)}, got '{lk}'", 400)
+    ast = rec.get("action_status")
+    if ast is not None and ast not in VALID_ACTION_STATUSES:
+        return error_response("REF_ENUM", f"action_status must be one of {sorted(VALID_ACTION_STATUSES)}, got '{ast}'", 400)
+    return None
+
+
+@app.post("/reflection")
+async def create_reflection(
+    request: Request,
+    _=Depends(require_write)
+):
+    """Z7b 创建反思记录。body 支持单条 object 或 {"records": [...]} 数组。"""
+    body = await request.json()
+
+    # 支持单条或 records 数组
+    if isinstance(body, dict) and "records" in body:
+        records = body["records"]
+        if not isinstance(records, list):
+            return error_response("BAD_PARAM", "'records' must be an array", 400)
+    elif isinstance(body, dict):
+        records = [body]
+    else:
+        return error_response("BAD_PARAM", "body must be an object or {'records': [...]}", 400)
+
+    if not records:
+        return error_response("BAD_PARAM", "no records provided", 400)
+
+    # 先全量校验
+    for i, rec in enumerate(records):
+        err = _validate_reflection_record(rec)
+        if err is not None:
+            return err
+
+    conn = get_d12writer_conn()
+    inserted_ids = []
+    try:
+        with conn.cursor() as cur:
+            # 批量校验 decision_id 存在于 prediction
+            decision_ids = list({rec["decision_id"] for rec in records})
+            cur.execute(
+                "SELECT prediction_id FROM prediction WHERE prediction_id = ANY(%s)",
+                (decision_ids,)
+            )
+            existing = {row[0] for row in cur.fetchall()}
+            missing = [did for did in decision_ids if did not in existing]
+            if missing:
+                conn.close()
+                return error_response(
+                    "REF_DECISION_NOT_FOUND",
+                    f"decision_id not found in prediction: {missing}",
+                    404
+                )
+
+            # 逐条 INSERT
+            for rec in records:
+                cur.execute("""
+                    INSERT INTO reflection (decision_id, closed_at, quadrant, error_stage,
+                                            lesson_text, lesson_kind, action_item, action_status, actor)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    rec["decision_id"],
+                    rec.get("closed_at"),
+                    rec.get("quadrant"),
+                    rec.get("error_stage"),
+                    rec.get("lesson_text"),
+                    rec.get("lesson_kind"),
+                    rec.get("action_item"),
+                    rec.get("action_status", "open"),
+                    rec.get("actor", "guanshi"),
+                ))
+                inserted_ids.append(cur.fetchone()[0])
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return envelope({"inserted_ids": inserted_ids, "count": len(inserted_ids)})
+
+
+@app.get("/reflection/recent")
+async def reflection_recent(
+    days: int = Query(default=30, ge=1, le=365),
+    _=Depends(require_read)
+):
+    """Z7b 近 N 天反思记录（默认30，上限365），closed_at 倒序。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT * FROM reflection
+            WHERE closed_at >= now() - INTERVAL '%s days'
+            ORDER BY closed_at DESC
+            LIMIT 500
+        """, (days,))
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
+
+
+@app.get("/reflection/action_items")
+async def reflection_action_items(
+    status: str = Query(default="open"),
+    _=Depends(require_read)
+):
+    """Z7b 行动项查询。status 缺省 open，支持 open/done/waived/all。"""
+    if status != "all" and status not in VALID_ACTION_STATUSES:
+        return error_response("BAD_PARAM", f"status must be open/done/waived/all, got '{status}'", 400)
+
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        if status == "all":
+            cur.execute("""
+                SELECT * FROM reflection
+                WHERE action_item IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 500
+            """)
+        else:
+            cur.execute("""
+                SELECT * FROM reflection
+                WHERE action_status = %s AND action_item IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 500
+            """, (status,))
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
+
 # ─── Error handlers ───────────────────────────────────────────────────
 
 @app.exception_handler(psycopg2.errors.QueryCanceled)
