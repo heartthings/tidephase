@@ -201,3 +201,71 @@ jobs:
     critical: false
     enabled: true
     note: "采集日报 16:45（飞书webhook）"
+
+  # ─── Z8 W2b: lovetrade 迁移作业 ────────────────────────────────────
+
+  - job_name: j_topic_sync
+    domain: D6
+    target_tables: [topic, topic_category, topic_group, topic_links]
+    schedule_cron: "0 8 * * 1-5"
+    source_chain: ["longhu"]
+    retry_policy: {"tries": 2, "backoff_s": [30, 120]}
+    timeout_s: 1800
+    critical: false
+    enabled: true
+    note: "题材库增量同步 08:00（爬取+AI解释+飞书推送）"
+
+  - job_name: j_radar
+    domain: D8
+    target_tables: [radar_event]
+    schedule_cron: "*/30 9-15 * * 1-5"
+    source_chain: ["longhu"]
+    retry_policy: {"tries": 2, "backoff_s": [5, 30]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "市场雷达盘中*/30（longhu适配器已就绪）"
+
+  - job_name: j_market_messages_hot
+    domain: D9
+    target_tables: [market_messages]
+    schedule_cron: "*/15 9-15 * * 1-5"
+    source_chain: ["longhu"]
+    retry_policy: {"tries": 2, "backoff_s": [5, 30]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "核心热点消息盘中*/15"
+
+  - job_name: j_market_messages_other
+    domain: D9
+    target_tables: [market_messages]
+    schedule_cron: "*/8 * * * *"
+    source_chain: ["longhu"]
+    retry_policy: {"tries": 2, "backoff_s": [5, 30]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "动态分类消息*/8（全天）"
+
+  - job_name: j_plate_intraday
+    domain: D6
+    target_tables: [plate_movement_intraday]
+    schedule_cron: "*/5 9-15 * * 1-5"
+    source_chain: ["longhu"]
+    retry_policy: {"tries": 2, "backoff_s": [5, 30]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "板块异动盘中5min降采样（梁总10-10批准）"
+
+  - job_name: j_prediction_sync
+    domain: D12
+    target_tables: [prediction, cognition]
+    schedule_cron: "0 9,18 * * 1-5"
+    source_chain: ["internal"]
+    retry_policy: {"tries": 1, "backoff_s": [10]}
+    timeout_s: 300
+    critical: false
+    enabled: true
+    note: "预测状态同步 09:00/18:00（D12端点已活）"
