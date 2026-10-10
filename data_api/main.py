@@ -82,6 +82,52 @@ def load_meta() -> dict:
 
 META = load_meta()
 
+# ─── Adaptive ORDER BY (Z7c-fix: prediction 等无 date 列的表) ─────────
+_table_sort_cache: dict = {}  # table → {"date_col": str|None, "has_code": bool}
+_table_sort_ts: dict = {}     # table → last_refresh_ts
+_SORT_CACHE_TTL = 300  # 5 min
+
+def _detect_table_sort(conn, table: str) -> dict:
+    """探测表的排序列: 有 date 用 date; 否则 created_at/ts; 再否则主键。
+    同时检测是否有 code 列。结果缓存 5min。
+    """
+    now = time.time()
+    if table in _table_sort_cache and now - _table_sort_ts.get(table, 0) < _SORT_CACHE_TTL:
+        return _table_sort_cache[table]
+
+    try:
+        cur = conn.cursor()
+        # 获取所有列名
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s
+            ORDER BY ordinal_position
+        """, (table,))
+        columns = {r[0] for r in cur.fetchall()}
+        cur.close()
+
+        # 确定日期排序列
+        if "date" in columns:
+            date_col = "date"
+        elif "created_at" in columns:
+            date_col = "created_at"
+        elif "ts" in columns:
+            date_col = "ts"
+        elif "pub_ts" in columns:
+            date_col = "pub_ts"
+        else:
+            date_col = None  # fallback: 不 ORDER BY date
+
+        has_code = "code" in columns
+        result = {"date_col": date_col, "has_code": has_code}
+    except Exception:
+        # 探测失败 → 安全降级: 假设 date + code
+        result = {"date_col": "date", "has_code": True}
+
+    _table_sort_cache[table] = result
+    _table_sort_ts[table] = now
+    return result
+
 # ─── DB connections ────────────────────────────────────────────────────
 
 _reader_pool = None
@@ -438,14 +484,17 @@ async def data_query(
         sql = f"SELECT {select_fields} FROM {table} WHERE 1=1"
         params = []
 
-        # 日期过滤
-        if start:
-            date_col = "date" if table not in ("news_telegraph", "stock_news", "announcements") else "pub_ts"
-            sql += f" AND {date_col} >= %s"
+        # Z7c-fix: 自适应排序列（统一探测，供日期过滤/游标/ORDER BY 共用）
+        sort_info = _detect_table_sort(conn, table)
+
+        # 日期过滤 (Z7c-fix: 自适应日期列)
+        _date_col_map = {"news_telegraph": "pub_ts", "stock_news": "pub_ts", "announcements": "pub_ts"}
+        filter_date_col = _date_col_map.get(table) or sort_info.get("date_col") or "date"
+        if start and filter_date_col:
+            sql += f" AND {filter_date_col} >= %s"
             params.append(start)
-        if end:
-            date_col = "date" if table not in ("news_telegraph", "stock_news", "announcements") else "pub_ts"
-            sql += f" AND {date_col} <= %s"
+        if end and filter_date_col:
+            sql += f" AND {filter_date_col} <= %s"
             params.append(end)
 
         # 代码过滤
@@ -456,23 +505,33 @@ async def data_query(
                 sql += f" AND code IN ({placeholders})"
                 params.extend(code_list)
 
-        # 游标分页
-        if cursor:
-            sql += " AND (date, code) < (%s, %s)"
+        # 游标分页 (Z7c-fix: 自适应排序列)
+        if cursor and sort_info.get("date_col"):
+            _pk_col = sort_info["date_col"]
+            if sort_info.get("has_code"):
+                sql += f" AND ({_pk_col}, code) < (%s, %s)"
+            else:
+                sql += f" AND {_pk_col} < %s"
             try:
-                c_date, c_code = cursor.split("|")
-                params.extend([c_date, c_code])
-            except ValueError:
+                c_parts = cursor.split("|")
+                c_date = c_parts[0]
+                if sort_info.get("has_code"):
+                    c_code = c_parts[1] if len(c_parts) > 1 else ""
+                    params.extend([c_date, c_code])
+                else:
+                    params.append(c_date)
+            except (ValueError, IndexError):
                 pass
 
         order_dir = "DESC" if order.lower() == "desc" else "ASC"
-        # 检查表是否有 code 列
-        no_code_tables = ["sentiment_daily", "trade_cal", "session_def", "margin_daily",
-                          "northbound_daily", "macro_indicators", "policy_calendar"]
-        if table in no_code_tables:
-            sql += f" ORDER BY date {order_dir} LIMIT %s"
+        # Z7c-fix: 自适应排序列（prediction 等无 date 列的表不再 500）
+        sort_col = sort_info["date_col"] or "1"  # 无日期列则用常量（不排序）
+        if sort_info["has_code"] and sort_col != "1":
+            sql += f" ORDER BY {sort_col} {order_dir}, code {order_dir} LIMIT %s"
+        elif sort_col != "1":
+            sql += f" ORDER BY {sort_col} {order_dir} LIMIT %s"
         else:
-            sql += f" ORDER BY date {order_dir}, code {order_dir} LIMIT %s"
+            sql += f" LIMIT %s"
         params.append(limit)
 
         cur.execute(sql, params)
@@ -480,11 +539,13 @@ async def data_query(
 
     conn.close()
 
-    # 计算 next_cursor
+    # 计算 next_cursor (Z7c-fix: 自适应排序列)
     next_cursor = None
     if len(rows) == limit and rows:
         last = rows[-1]
-        next_cursor = f"{last.get('date', '')}|{last.get('code', '')}"
+        _nc_date = last.get(sort_info.get("date_col") or "date", "")
+        _nc_code = last.get("code", "") if sort_info.get("has_code") else ""
+        next_cursor = f"{_nc_date}|{_nc_code}"
 
     if format == "csv":
         import csv

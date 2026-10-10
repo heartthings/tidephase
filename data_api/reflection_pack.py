@@ -165,6 +165,10 @@ def _resolve_metric_route(metric: str, category: str, route_map: dict, gaps: lis
                          "reason": f"metric empty and no category_default for category='{category}'",
                          "affected": "S2"})
             return None
+        # Z7c-fix: 兜底命中也必须显式记录 gap，绝不静默降级
+        gaps.append({"section": section, "code": "FALSIFY_METRIC_MISSING",
+                     "reason": f"metric empty, fell back to category_default['{category}']='{fallback}'",
+                     "affected": "S2"})
         metric = fallback
 
     # B5: 校验 metric 格式
