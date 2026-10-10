@@ -21,6 +21,12 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Query, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse, StreamingResponse
 from pathlib import Path
+from pydantic import BaseModel
+
+from data_api.reflection_pack import (
+    assemble_reflection_pack, get_route_map, invalidate_route_map_cache,
+    DEFAULT_ROUTE_MAP,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("data-api")
@@ -293,6 +299,103 @@ async def base_rate_query(
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return envelope(rows)
+
+# ─── Z7c /data/reflection_pack (必须在 E5 /data/{table} 之前) ──────────
+
+@app.get("/data/reflection_pack")
+async def reflection_pack(
+    decision_id: str = Query(...),
+    window_start: str = None,
+    window_end: str = None,
+    section: str = None,
+    _=Depends(require_read)
+):
+    """Z7c 反思层证据包. 组装 S1~S4 四维快照 + falsify 实际序列 + 归因 + base_rate 对照.
+    诚实纪律: 任何数据缺失 → gaps[], 不做伪填充.
+    """
+    pack = assemble_reflection_pack(
+        get_reader_conn, decision_id,
+        window_start_override=window_start,
+        window_end_override=window_end,
+        sections_override=section,
+    )
+    if "error" in pack:
+        return error_response(pack["error"], f"decision_id '{decision_id}' not found", 404)
+    return envelope(pack)
+
+
+# ─── Z7c /reflection_pack/route_map ──────────────────────────────────
+
+@app.get("/reflection_pack/route_map")
+async def route_map_get(_=Depends(require_read)):
+    """Z7c 读回当前 route_map (从 job_registry.config->'route_map', 空则返回 DEFAULT)."""
+    rm = get_route_map(get_reader_conn)
+    return envelope(rm)
+
+
+class RouteMapBody(BaseModel):
+    route_map: dict
+    route_map_version: Optional[str] = None
+
+
+@app.patch("/reflection_pack/route_map")
+async def route_map_patch(body: RouteMapBody, _=Depends(require_write)):
+    """Z7c 整体替换 route_map. 逐条校验 table/column 在 information_schema 中存在."""
+    rm = body.route_map
+    if not rm or not isinstance(rm, dict):
+        return error_response("BAD_PARAM", "route_map must be a non-empty dict", 400)
+
+    # 校验 metric_routes 中 table/column 存在
+    for i, mr in enumerate(rm.get("metric_routes", [])):
+        tbl = mr.get("table")
+        col = mr.get("column")
+        if not tbl or not col:
+            return error_response("ROUTE_MAP_INVALID", f"metric_routes[{i}]: missing table or column", 400)
+        conn = get_reader_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = %s AND column_name = %s
+                """, (tbl, col))
+                if not cur.fetchone():
+                    return error_response("ROUTE_MAP_INVALID",
+                                          f"metric_routes[{i}]: {tbl}.{col} not found in information_schema", 400)
+        finally:
+            conn.close()
+
+    # Bump version
+    ver = body.route_map_version or rm.get("route_map_version", "")
+    if ver and not ver.endswith("."):
+        # Auto-increment: 2026-10-10.1 → 2026-10-10.2
+        parts = ver.rsplit(".", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            ver = f"{parts[0]}.{int(parts[1]) + 1}"
+    rm["route_map_version"] = ver
+
+    # 写入 job_registry.config->'route_map'
+    conn = get_d12writer_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE job_registry
+                SET config = jsonb_set(COALESCE(config, '{}'), '{route_map}', %s::jsonb),
+                    updated_at = now()
+                WHERE job_name = 'j_reflect_daily'
+            """, (json.dumps(rm),))
+            if cur.rowcount == 0:
+                conn.close()
+                return error_response("ROUTE_MAP_INVALID", "job_registry row j_reflect_daily not found", 404)
+        conn.commit()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    invalidate_route_map_cache()
+    return envelope({"route_map": rm, "route_map_version": ver})
+
 
 # ─── E5 /data/{table} ─────────────────────────────────────────────────
 
@@ -770,6 +873,7 @@ async def create_reflection(
 
     conn = get_d12writer_conn()
     inserted_ids = []
+    has_evidence_refs = False
     try:
         with conn.cursor() as cur:
             # 批量校验 decision_id 存在于 prediction
@@ -790,10 +894,13 @@ async def create_reflection(
 
             # 逐条 INSERT
             for rec in records:
+                if rec.get("evidence_refs") is not None:
+                    has_evidence_refs = True
                 cur.execute("""
                     INSERT INTO reflection (decision_id, closed_at, quadrant, error_stage,
-                                            lesson_text, lesson_kind, action_item, action_status, actor)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                            lesson_text, lesson_kind, action_item, action_status,
+                                            evidence_refs, evidence_summary, actor)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
                     rec["decision_id"],
@@ -804,6 +911,8 @@ async def create_reflection(
                     rec.get("lesson_kind"),
                     rec.get("action_item"),
                     rec.get("action_status", "open"),
+                    json.dumps(rec["evidence_refs"]) if rec.get("evidence_refs") is not None else None,
+                    rec.get("evidence_summary"),
                     rec.get("actor", "guanshi"),
                 ))
                 inserted_ids.append(cur.fetchone()[0])
@@ -817,7 +926,10 @@ async def create_reflection(
         except Exception:
             pass
 
-    return envelope({"inserted_ids": inserted_ids, "count": len(inserted_ids)})
+    resp = {"inserted_ids": inserted_ids, "count": len(inserted_ids)}
+    if not has_evidence_refs:
+        resp["warning"] = "NO_EVIDENCE_REFS"
+    return envelope(resp)
 
 
 @app.get("/reflection/recent")
