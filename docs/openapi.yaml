@@ -1,0 +1,520 @@
+openapi: 3.1.0
+info:
+  title: 观势数据层 API
+  description: 观势数据层 REST API · E1-E19 端点 · Bearer token 三档鉴权
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /meta/tables:
+    get:
+      summary: Meta Tables
+      operationId: meta_tables_meta_tables_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: domain
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Domain
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /meta/trade_cal:
+    get:
+      summary: Trade Cal
+      operationId: trade_cal_meta_trade_cal_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: market
+        in: query
+        required: false
+        schema:
+          type: string
+          default: CN
+          title: Market
+      - name: start
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          type: string
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /meta/instruments:
+    get:
+      summary: Instruments
+      operationId: instruments_meta_instruments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: market
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Market
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Type
+      - name: keyword
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Keyword
+      - name: code
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /data/base_rate:
+    get:
+      summary: Base Rate Query
+      description: E8 基率查询 · 口径1-5 · docs/base_rate_calibration_spec.md
+      operationId: base_rate_query_data_base_rate_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: regime
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Regime
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Category
+      - name: horizon
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Horizon
+      - name: window_type
+        in: query
+        required: false
+        schema:
+          type: string
+          default: both
+          title: Window Type
+      - name: window_end
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Window End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /data/{table}:
+    get:
+      summary: Data Query
+      operationId: data_query_data__table__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: table
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Table
+      - name: start
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          type: string
+          title: End
+      - name: codes
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Codes
+      - name: fields
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Fields
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50000
+          default: 5000
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Cursor
+      - name: order
+        in: query
+        required: false
+        schema:
+          type: string
+          default: desc
+          title: Order
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          default: json
+          title: Format
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /data/sentiment/latest:
+    get:
+      summary: Sentiment Latest
+      operationId: sentiment_latest_data_sentiment_latest_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 30
+          default: 1
+          title: N
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /data/global/overnight:
+    get:
+      summary: Global Overnight
+      operationId: global_overnight_data_global_overnight_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Date
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /watchlist:
+    get:
+      summary: Watchlist Get
+      operationId: watchlist_get_watchlist_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+    put:
+      summary: Watchlist Put
+      operationId: watchlist_put_watchlist_put
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /ingest/status:
+    get:
+      summary: Ingest Status
+      operationId: ingest_status_ingest_status_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Date
+      - name: table
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Table
+      - name: job
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Job
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /calibration:
+    get:
+      summary: Calibration Query
+      description: E9 校准视图 · 口径4 · 按月分桶
+      operationId: calibration_query_calibration_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Category
+      - name: window
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Window
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /d12/cognition:
+    post:
+      summary: Create Cognition
+      description: '创建认知条目。cognition_id 格式校验: ^[FCHM]-\d{3}$'
+      operationId: create_cognition_d12_cognition_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /d12/prediction:
+    post:
+      summary: Create Prediction
+      description: 创建预测条目。
+      operationId: create_prediction_d12_prediction_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /d12/prediction/{prediction_id}/result:
+    put:
+      summary: Update Prediction Result
+      description: 人工改判 prediction result。result_note 必填。
+      operationId: update_prediction_result_d12_prediction__prediction_id__result_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: prediction_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Prediction Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /d12/prediction/due:
+    get:
+      summary: Prediction Due
+      description: E13 到期待验清单。
+      operationId: prediction_due_d12_prediction_due_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Date
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          default: pending
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

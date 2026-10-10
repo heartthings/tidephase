@@ -62,6 +62,54 @@
 | "远端第二副本"待办 | 已取消，不再列入计划 |
 | README.md | 已追加运维决策记录 |
 
+## P1-2 Z5 残余重启 ✅ 已完成
+
+### 1. OpenAPI 文档
+
+| 项 | 状态 |
+|----|------|
+| /openapi.json | ✅ 15 端点已导出 |
+| docs/openapi.yaml | ✅ 已生成 |
+| Python 客户端样例 | ✅ `tools/data_api_client_example.py`（Bearer token/分页/CSV） |
+
+### 2. D12 写端点
+
+| 端点 | 方法 | 状态 | 说明 |
+|------|------|------|------|
+| /d12/cognition | POST | ✅ | ID 校验 `^[FCHM]-\d{3}$` + 重复检测 409 |
+| /d12/prediction | POST | ✅ | confidence_pct 0-100 校验 + horizon T1/T3/T5/W1 |
+| /d12/prediction/{id}/result | PUT | ✅ | 人工改判，result_note 必填，返回 base_rate_stale |
+| /d12/prediction/due | GET | ✅ | E13 到期待验清单 |
+
+### 3. base_rate / calibration 视图
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| V003 migration | ✅ | prediction.horizon 列 + base_rate 表 + calibration_view |
+| E8 /data/base_rate | ✅ | 口径1-5 · 双口径 window_type 参数 |
+| E9 /calibration | ✅ | 口径4 · 按月分桶 · Brier Score |
+| 路由顺序修复 | ✅ | E8 在 E5 /data/{table} 之前，避免通配拦截 |
+
+### 4. 端点清单（15 个）
+
+```
+GET      /health
+GET      /meta/tables
+GET      /meta/trade_cal
+GET      /meta/instruments
+GET      /data/base_rate        ← NEW (E8)
+GET      /data/{table}          (E5)
+GET      /data/sentiment/latest (E6)
+GET      /data/global/overnight (E7)
+GET      /calibration           ← NEW (E9)
+GET PUT  /watchlist             (E15)
+GET      /ingest/status         (E16)
+POST     /d12/cognition         ← NEW
+POST     /d12/prediction        ← NEW
+PUT      /d12/prediction/{id}/result  ← NEW
+GET      /d12/prediction/due    ← NEW (E13)
+```
+
 ---
 
 ## P0-1 数据纠错 ✅ 已完成
@@ -165,6 +213,54 @@
 | dops 备份 timer/脚本 | 代码面不存在，无需停用 |
 | "远端第二副本"待办 | 已取消，不再列入计划 |
 | README.md | 已追加运维决策记录 |
+
+## P1-2 Z5 残余重启 ✅ 已完成
+
+### 1. OpenAPI 文档
+
+| 项 | 状态 |
+|----|------|
+| /openapi.json | ✅ 15 端点已导出 |
+| docs/openapi.yaml | ✅ 已生成 |
+| Python 客户端样例 | ✅ `tools/data_api_client_example.py`（Bearer token/分页/CSV） |
+
+### 2. D12 写端点
+
+| 端点 | 方法 | 状态 | 说明 |
+|------|------|------|------|
+| /d12/cognition | POST | ✅ | ID 校验 `^[FCHM]-\d{3}$` + 重复检测 409 |
+| /d12/prediction | POST | ✅ | confidence_pct 0-100 校验 + horizon T1/T3/T5/W1 |
+| /d12/prediction/{id}/result | PUT | ✅ | 人工改判，result_note 必填，返回 base_rate_stale |
+| /d12/prediction/due | GET | ✅ | E13 到期待验清单 |
+
+### 3. base_rate / calibration 视图
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| V003 migration | ✅ | prediction.horizon 列 + base_rate 表 + calibration_view |
+| E8 /data/base_rate | ✅ | 口径1-5 · 双口径 window_type 参数 |
+| E9 /calibration | ✅ | 口径4 · 按月分桶 · Brier Score |
+| 路由顺序修复 | ✅ | E8 在 E5 /data/{table} 之前，避免通配拦截 |
+
+### 4. 端点清单（15 个）
+
+```
+GET      /health
+GET      /meta/tables
+GET      /meta/trade_cal
+GET      /meta/instruments
+GET      /data/base_rate        ← NEW (E8)
+GET      /data/{table}          (E5)
+GET      /data/sentiment/latest (E6)
+GET      /data/global/overnight (E7)
+GET      /calibration           ← NEW (E9)
+GET PUT  /watchlist             (E15)
+GET      /ingest/status         (E16)
+POST     /d12/cognition         ← NEW
+POST     /d12/prediction        ← NEW
+PUT      /d12/prediction/{id}/result  ← NEW
+GET      /d12/prediction/due    ← NEW (E13)
+```
 
 ---
 

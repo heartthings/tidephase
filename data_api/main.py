@@ -57,7 +57,7 @@ def load_meta() -> dict:
             "consensus_eps", "research_reports", "valuation_daily",
             "news_telegraph", "stock_news", "announcements", "market_messages",
             "option_contracts", "option_tquote", "option_greeks_iv",
-            "cognition", "prediction", "base_rate",
+            "cognition", "prediction", "base_rate", "calibration_view",
             "instrument_master", "watchlist",
             "ingest_log", "quarantine", "job_registry",
             "verify_source", "verify_diff",
@@ -250,6 +250,45 @@ async def instruments(
             sql += " AND (name ILIKE %s OR code ILIKE %s)"
             params.extend([f"%{keyword}%", f"%{keyword}%"])
         sql += " ORDER BY code LIMIT 5000"
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
+
+# ─── E8 /data/base_rate (必须在 E5 /data/{table} 之前，避免被通配拦截) ──
+
+@app.get("/data/base_rate")
+async def base_rate_query(
+    regime: str = None,
+    category: str = None,
+    horizon: str = None,
+    window_type: str = "both",
+    window_end: str = None,
+    _=Depends(require_read)
+):
+    """E8 基率查询 · 口径1-5 · docs/base_rate_calibration_spec.md"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = "SELECT * FROM base_rate WHERE 1=1"
+        params = []
+        if regime:
+            sql += " AND regime = %s"
+            params.append(regime)
+        if category:
+            sql += " AND category = %s"
+            params.append(category)
+        if horizon:
+            sql += " AND horizon = %s"
+            params.append(horizon)
+        if window_type != "both":
+            sql += " AND window_type = %s"
+            params.append(window_type)
+        if window_end:
+            sql += " AND window_end = %s"
+            params.append(window_end)
+        else:
+            sql += " AND window_end = (SELECT MAX(window_end) FROM base_rate)"
+        sql += " ORDER BY regime, category, horizon, window_type"
         cur.execute(sql, params)
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
@@ -462,6 +501,208 @@ async def ingest_status(
             sql += " AND job = %s"
             params.append(job)
         sql += " ORDER BY ts DESC LIMIT 100"
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
+
+# ─── E9 /calibration ─────────────────────────────────────────────────
+
+@app.get("/calibration")
+async def calibration_query(
+    category: str = None,
+    window: str = None,
+    _=Depends(require_read)
+):
+    """E9 校准视图 · 口径4 · 按月分桶"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = 'SELECT * FROM calibration_view WHERE 1=1'
+        params = []
+        if category:
+            sql += " AND category = %s"
+            params.append(category)
+        if window:
+            if ":" in window:
+                start, end = window.split(":", 1)
+                sql += ' AND "window" >= %s AND "window" <= %s'
+                params.extend([start, end])
+            else:
+                sql += ' AND "window" = %s'
+                params.append(window)
+        else:
+            # 默认最近 12 个月
+            sql += ' AND "window" >= (CURRENT_DATE - INTERVAL \'12 months\')::date'
+        sql += ' ORDER BY "window" DESC, category'
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
+
+# ─── D12 写端点 ──────────────────────────────────────────────────────
+
+import re
+
+COGNITION_ID_PATTERN = re.compile(r"^[FCHM]-\d{3}$")
+
+@app.post("/d12/cognition")
+async def create_cognition(
+    request: Request,
+    _=Depends(require_write)
+):
+    """创建认知条目。cognition_id 格式校验: ^[FCHM]-\d{3}$"""
+    body = await request.json()
+    cid = body.get("cognition_id", "")
+
+    # 格式校验
+    if not COGNITION_ID_PATTERN.match(cid):
+        return error_response("BAD_PARAM", f"cognition_id must match ^[FCHM]-\\d{{3}}$, got '{cid}'", 400)
+
+    # 必填字段
+    for field in ("type", "title", "statement", "source"):
+        if not body.get(field):
+            return error_response("BAD_PARAM", f"'{field}' is required", 400)
+
+    conn = get_d12writer_conn()
+    with conn.cursor() as cur:
+        # 重复检测
+        cur.execute("SELECT version FROM cognition WHERE cognition_id = %s ORDER BY version DESC LIMIT 1", (cid,))
+        existing = cur.fetchone()
+        if existing:
+            conn.close()
+            return error_response("CONFLICT", f"cognition_id '{cid}' already exists (version={existing[0]})", 409)
+
+        version = body.get("version", 1)
+        cur.execute("""
+            INSERT INTO cognition (cognition_id, version, type, title, statement, source,
+                                   confidence, regime_scope, validations, falsifications,
+                                   derives_from, status, actor)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            cid, version, body["type"], body["title"], body["statement"], body["source"],
+            body.get("confidence"),
+            json.dumps(body.get("regime_scope")) if body.get("regime_scope") else None,
+            json.dumps(body.get("validations")) if body.get("validations") else None,
+            json.dumps(body.get("falsifications")) if body.get("falsifications") else None,
+            json.dumps(body.get("derives_from")) if body.get("derives_from") else None,
+            body.get("status", "active"),
+            body.get("actor", "guanshi"),
+        ))
+    conn.commit()
+    conn.close()
+    return envelope({"created": cid, "version": version})
+
+
+@app.post("/d12/prediction")
+async def create_prediction(
+    request: Request,
+    _=Depends(require_write)
+):
+    """创建预测条目。"""
+    body = await request.json()
+    pid = body.get("prediction_id", "")
+
+    # 必填字段
+    for field in ("prediction_id", "statement", "category", "confidence_pct", "check_date", "falsify"):
+        if field not in body or body[field] is None:
+            return error_response("BAD_PARAM", f"'{field}' is required", 400)
+
+    # confidence_pct 范围校验
+    conf = body.get("confidence_pct")
+    if not isinstance(conf, int) or conf < 0 or conf > 100:
+        return error_response("BAD_PARAM", "confidence_pct must be int 0-100", 400)
+
+    # horizon 校验 (可选但推荐)
+    horizon = body.get("horizon")
+    if horizon and horizon not in ("T1", "T3", "T5", "W1"):
+        return error_response("BAD_PARAM", "horizon must be T1/T3/T5/W1", 400)
+
+    conn = get_d12writer_conn()
+    with conn.cursor() as cur:
+        # 重复检测
+        cur.execute("SELECT prediction_id FROM prediction WHERE prediction_id = %s", (pid,))
+        if cur.fetchone():
+            conn.close()
+            return error_response("CONFLICT", f"prediction_id '{pid}' already exists", 409)
+
+        cur.execute("""
+            INSERT INTO prediction (prediction_id, statement, category, confidence_pct,
+                                    base_rate_ref, conditions, falsify, check_date,
+                                    regime_at_create, horizon, result, actor, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            pid, body["statement"], body["category"], conf,
+            body.get("base_rate_ref"),
+            json.dumps(body.get("conditions")) if body.get("conditions") else None,
+            json.dumps(body["falsify"]),
+            body["check_date"],
+            body.get("regime_at_create"),
+            horizon,
+            body.get("result", "pending"),
+            body.get("actor", "guanshi"),
+            body.get("source", "guanshi"),
+        ))
+    conn.commit()
+    conn.close()
+    return envelope({"created": pid})
+
+
+@app.put("/d12/prediction/{prediction_id}/result")
+async def update_prediction_result(
+    prediction_id: str,
+    request: Request,
+    _=Depends(require_write)
+):
+    """人工改判 prediction result。result_note 必填。"""
+    body = await request.json()
+    result = body.get("result")
+    result_note = body.get("result_note")
+
+    if result not in ("hit", "miss", "pending", "invalid", "expired"):
+        return error_response("BAD_PARAM", f"result must be hit/miss/pending/invalid/expired, got '{result}'", 400)
+    if not result_note:
+        return error_response("BAD_PARAM", "result_note is required for manual override", 400)
+
+    conn = get_d12writer_conn()
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE prediction
+            SET result = %s, result_note = %s, checked_at = now()
+            WHERE prediction_id = %s
+            RETURNING prediction_id
+        """, (result, result_note, prediction_id))
+        updated = cur.fetchone()
+    conn.commit()
+    conn.close()
+
+    if not updated:
+        return error_response("NOT_FOUND", f"prediction_id '{prediction_id}' not found", 404)
+
+    return envelope({"updated": prediction_id, "result": result, "base_rate_stale": True})
+
+
+@app.get("/d12/prediction/due")
+async def prediction_due(
+    date: str = None,
+    status: str = "pending",
+    _=Depends(require_read)
+):
+    """E13 到期待验清单。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = """
+            SELECT prediction_id, statement, category, confidence_pct, check_date,
+                   result, result_note, created_at
+            FROM prediction
+            WHERE result = %s
+        """
+        params = [status]
+        if date:
+            sql += " AND check_date <= %s"
+            params.append(date)
+        else:
+            sql += " AND check_date < CURRENT_DATE"
+        sql += " ORDER BY check_date ASC LIMIT 200"
         cur.execute(sql, params)
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
