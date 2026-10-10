@@ -269,3 +269,14 @@ jobs:
     critical: false
     enabled: true
     note: "预测状态同步 09:00/18:00（D12端点已活）"
+
+  - job_name: j_base_rate
+    domain: D12
+    target_tables: [base_rate]
+    schedule_cron: "0 18 * * 5"
+    source_chain: ["internal"]
+    retry_policy: {"tries": 2, "backoff_s": [10, 60]}
+    timeout_s: 300
+    critical: false
+    enabled: true
+    note: "基率聚合 每周五18:00（口径spec v1.0 观势2026-10-07冻结）"
