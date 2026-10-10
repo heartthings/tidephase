@@ -375,10 +375,27 @@ class LonghuAdapter(BaseAdapter):
             return [data] if data else []
 
     def _parse_emotion(self, data: dict) -> list:
-        """解析 Emotion 端点：CGL/YLL 30日序列。"""
-        zy_list = data.get("ZY", [])
+        """解析 Emotion 端点：CGL/YLL 30日序列。
+        Z7 修复：实测响应顶层为 list（空列表）与 errcode，
+        兼容 list（顶层列表）/ ZY（嵌套列表）双键。
+        """
         rows = []
+
+        # 优先取 ZY 键（旧格式），兜底取顶层 list（新格式/实测格式）
+        zy_list = data.get("ZY")
+        if zy_list is None:
+            # 实测：响应顶层直接是 list（errcode + 空列表）
+            # 尝试从 data 中找到第一个 list 值
+            for v in data.values():
+                if isinstance(v, list):
+                    zy_list = v
+                    break
+        if not zy_list:
+            zy_list = []
+
         for item in zy_list:
+            if not isinstance(item, dict):
+                continue
             rows.append({
                 "date": item.get("Day", ""),
                 "dbcgl": float(item.get("CGL", 0)) if item.get("CGL") else None,

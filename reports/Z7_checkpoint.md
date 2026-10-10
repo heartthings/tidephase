@@ -25,6 +25,30 @@
 | stock_daily 覆盖 | 10-08: 5,224 行 ✅ / 10-09: 5,224 行 ✅ |
 | 缺口 | **无** ✅ |
 
+## P0-3 D8 龙虎落地 ✅ 代码面完成 / ⏳ 周一实盘待测
+
+### 处置明细
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| rate_limits.yaml longhu 人为限速 | ✅ 已删除 | 0.5rps/burst=1 → 移除，仅保留 circuit_breaker_seconds=1800 |
+| rate_limiter.py DEFAULT_RATE_LIMITS | ✅ 已删除 longhu 条目 | RateLimiter 跳过无 rps 的源 |
+| longhu.py _parse_emotion | ✅ 已修复 | 兼容 list（顶层列表）/ ZY（嵌套列表）双键 |
+| smoke_longhu_one.py | ✅ 已更新 | count_rows 补 ZY/DongXiang 键；EP 补 DongXiang |
+| credentials.md | ✅ 已更新 | 三套凭证状态=有效 + 限速裁决 + YouZiDongXiang 结论 |
+
+### YouZiDongXiang 结论
+
+- auth 有效（errcode=0），服务端 DongXiang 恒空
+- D4 资金面维持东财链，龙虎 DongXiang 保留代码面不阻塞
+
+### ⏳ 周一 10-12 开盘后待测
+
+- [ ] Emotion 行数（交易日应有 CGL/YLL 30日序列）
+- [ ] DailyLimitResumption 行数（nums 六项 + list 涨停明细）
+- [ ] Radar 行数（盘中雷达数据）
+- [ ] 结果追加到本节
+
 ---
 
 ## P0-1 数据纠错 ✅ 已完成
@@ -91,6 +115,30 @@
 | 窗口内交易日 | 10-08（Wed）、10-09（Thu） |
 | stock_daily 覆盖 | 10-08: 5,224 行 ✅ / 10-09: 5,224 行 ✅ |
 | 缺口 | **无** ✅ |
+
+## P0-3 D8 龙虎落地 ✅ 代码面完成 / ⏳ 周一实盘待测
+
+### 处置明细
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| rate_limits.yaml longhu 人为限速 | ✅ 已删除 | 0.5rps/burst=1 → 移除，仅保留 circuit_breaker_seconds=1800 |
+| rate_limiter.py DEFAULT_RATE_LIMITS | ✅ 已删除 longhu 条目 | RateLimiter 跳过无 rps 的源 |
+| longhu.py _parse_emotion | ✅ 已修复 | 兼容 list（顶层列表）/ ZY（嵌套列表）双键 |
+| smoke_longhu_one.py | ✅ 已更新 | count_rows 补 ZY/DongXiang 键；EP 补 DongXiang |
+| credentials.md | ✅ 已更新 | 三套凭证状态=有效 + 限速裁决 + YouZiDongXiang 结论 |
+
+### YouZiDongXiang 结论
+
+- auth 有效（errcode=0），服务端 DongXiang 恒空
+- D4 资金面维持东财链，龙虎 DongXiang 保留代码面不阻塞
+
+### ⏳ 周一 10-12 开盘后待测
+
+- [ ] Emotion 行数（交易日应有 CGL/YLL 30日序列）
+- [ ] DailyLimitResumption 行数（nums 六项 + list 涨停明细）
+- [ ] Radar 行数（盘中雷达数据）
+- [ ] 结果追加到本节
 
 ---
 

@@ -25,9 +25,23 @@
 
 | 账号 | 配置路径 | 状态 |
 |------|----------|------|
-| 3167791 | `longhu.account_3167791` | token 轮换待梁总 |
-| 3965820 | `longhu.account_3965820` | token 轮换待梁总 |
-| Emotion | `longhu.emotion_device_id` | token 轮换待梁总 |
+| 3167791 | `longhu.account_3167791` | ✅ 实测 errcode=0 有效（Z7 T-R1 外置） |
+| 3965820 | `longhu.account_3965820` | ✅ 实测 errcode=0 有效（Z7 T-R1 外置） |
+| Emotion | `longhu.emotion_device_id` | ✅ 实测 errcode=0 有效（Z7 T-R1 外置） |
+| entrust_purchase | `longhu.entrust_purchase` | ✅ 实测 errcode=0 有效 |
+| theme_info | `longhu.theme_info_token` | ✅ 实测 errcode=0 有效 |
+
+### 龙虎限速（Z7 梁总 10-10 裁决）
+
+- **人为限速已删除**：0.5rps / 日≤1500 限制不再执行
+- **保留反应式熔断**：429/403 → 全源熔断 30min（`longhu.py _trigger_circuit_breaker`）
+- 凭证以 lovetrade-service Java 代码为准，configs/secrets.yaml 三套实测 errcode=0
+
+### YouZiDongXiang / DongXiang 结论（Z7）
+
+- 实测 auth 有效（errcode=0），但服务端 DongXiang 数据恒空
+- **D4 资金面维持东财链**（eastmoney adapter），不再依赖龙虎 DongXiang
+- 龙虎 DongXiang 端点保留代码面，待供应商侧有数据后自动恢复
 
 ## 安全规则
 

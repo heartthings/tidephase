@@ -17,6 +17,7 @@ EP = {
     "YouZiDongXiang": {"host": "applhb", "a": "YouZiDongXiangByList", "c": "Index", "auth": "account_3965820"},
     "Emotion": {"host": "apphis", "a": "GetMoneyDate", "c": "Emotion", "auth": "emotion_device"},
     "Radar": {"host": "apphwhq", "a": "Radar", "c": "HomeDingPan", "auth": "device_3167791"},
+    "DongXiang": {"host": "applhb", "a": "YouZiDongXiangByList", "c": "Index", "auth": "account_3965820"},
 }
 
 endpoint = sys.argv[1] if len(sys.argv) > 1 else "DailyLimitResumption"
@@ -49,10 +50,12 @@ print("errcode:", d.get("errcode"), "| errmsg:", str(d.get("errmsg"))[:80])
 
 
 def count_rows(o):
+    """递归计数，兼容 list / ZY / DongXiang / data / List 等多键格式。"""
     if isinstance(o, list):
         return len(o)
     if isinstance(o, dict):
-        for k in ("data", "Data", "list", "List", "result", "Result"):
+        # Z7: 补充 ZY / DongXiang 键（Emotion/DongXiang 端点）
+        for k in ("data", "Data", "list", "List", "result", "Result", "ZY", "DongXiang"):
             v = o.get(k)
             if isinstance(v, list):
                 return len(v)

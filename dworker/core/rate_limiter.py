@@ -15,7 +15,7 @@ DEFAULT_RATE_LIMITS = {
     "akshare": {"rps": 1.0, "burst": 1, "jitter_s": [0.3, 1.0]},
     "mootdx": {"rps": 4.0, "burst": 4},
     "sina": {"rps": 2.0, "burst": 4},
-    "longhu": {"rps": 0.5, "burst": 1},
+    # longhu: 人为限速已删除（Z7 梁总 10-10 裁决），仅保留反应式熔断
     "hkex": {"rps": 0.5, "burst": 2},
     "cninfo": {"rps": 0.5, "burst": 2},
     "cls": {"rps": 0.5, "burst": 2},
@@ -67,6 +67,9 @@ class RateLimiter:
         config = self._load_config(config_path)
 
         for source, params in config.items():
+            # Skip sources without rps/burst (e.g. longhu: 仅反应式熔断，无人为限速)
+            if "rps" not in params:
+                continue
             rps = params.get("rps", 1.0)
             burst = params.get("burst", 1)
             jitter = params.get("jitter_s")
