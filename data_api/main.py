@@ -27,6 +27,7 @@ from data_api.reflection_pack import (
     assemble_reflection_pack, get_route_map, invalidate_route_map_cache,
     DEFAULT_ROUTE_MAP,
 )
+from data_api.lovetrade_routes import router as lovetrade_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("data-api")
@@ -67,6 +68,11 @@ def load_meta() -> dict:
             "instrument_master", "watchlist",
             "ingest_log", "quarantine", "job_registry",
             "verify_source", "verify_diff",
+            # Z8 W1 新增
+            "topic", "topic_category", "topic_group", "topic_links",
+            "note_category", "trading_note", "report",
+            "dynamic_category_config", "trading_system_node",
+            "plate_movement_intraday",
         ],
         "code_aliases": {
             "KS11": "KOSPI",
@@ -172,6 +178,9 @@ app = FastAPI(
     description="观势数据层 REST API · E1-E19 端点 · Bearer token 三档鉴权",
     lifespan=lifespan,
 )
+
+# Z8 W2: 注册 lovetrade 路由
+app.include_router(lovetrade_router)
 
 # ─── E1 /health ────────────────────────────────────────────────────────
 
