@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-stock_daily 3年回填（detached 模式）
+stock_daily 缺口补齐（近 7 个自然日内的交易日）
+Z7 变更：梁总 2026-10-10 裁决"不用 3 年，前一周即可"。
+用途：补齐近 7 天内缺失的交易日数据（非全量历史回填）。
 - 断点续传：progress 表记录每只股票完成状态
 - 日志落盘：/home/hello/application/dev/market-datalayer/data/backfill_stock_daily.log
-- 速率控制：0.5-1s 随机延迟，避免被封 IP
+- 速率控制：1-2s 随机延迟，避免被封 IP
 """
 import json, logging, os, sys, time, traceback
 from datetime import datetime, timedelta
@@ -26,8 +28,16 @@ logging.basicConfig(
 logger = logging.getLogger("backfill")
 
 SECRETS_PATH = Path("/home/hello/application/dev/market-datalayer/configs/secrets.yaml")
-START_DATE = "2023-10-08"  # 3 years ago
-END_DATE = "2026-10-07"    # yesterday
+
+# Z7: 默认窗口改为"近 7 个自然日"
+DEFAULT_WINDOW_DAYS = 7
+
+def compute_window():
+    """计算回填窗口：近 7 个自然日内的交易日。"""
+    today = datetime.now()
+    end_date = today.strftime("%Y-%m-%d")
+    start_date = (today - timedelta(days=DEFAULT_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    return start_date, end_date
 
 def get_tsdb_conn():
     with open(SECRETS_PATH) as f:
@@ -176,31 +186,73 @@ def update_progress(conn, code: str, status: str, rows: int):
         """, (code, status, rows))
     conn.commit()
 
+def get_trading_days_in_window(conn, start_date: str, end_date: str) -> list:
+    """从 trade_cal 获取窗口内的交易日列表。"""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT cal_date FROM trade_cal
+            WHERE market='SSE' AND is_open=1 AND cal_date >= %s AND cal_date <= %s
+            ORDER BY cal_date
+        """, (start_date, end_date))
+        return [str(r[0]) for r in cur.fetchall()]
+
+
+def get_missing_dates(conn, trading_days: list) -> list:
+    """找出 stock_daily 中缺失的交易日。"""
+    missing = []
+    with conn.cursor() as cur:
+        for day in trading_days:
+            cur.execute("SELECT count(*) FROM stock_daily WHERE date = %s", (day,))
+            cnt = cur.fetchone()[0]
+            if cnt == 0:
+                missing.append(day)
+    return missing
+
+
 def main():
+    import random
+    
+    start_date, end_date = compute_window()
+    
     logger.info("=" * 60)
-    logger.info("stock_daily 3年回填启动")
-    logger.info(f"  日期范围: {START_DATE} ~ {END_DATE}")
+    logger.info("stock_daily 缺口补齐启动（Z7: 近7自然日窗口）")
+    logger.info(f"  窗口: {start_date} ~ {end_date}")
     logger.info(f"  PID: {os.getpid()}")
     logger.info("=" * 60)
-    
-    import random
     
     conn = get_tsdb_conn()
     ensure_progress_table(conn)
     
+    # 找出窗口内的交易日
+    trading_days = get_trading_days_in_window(conn, start_date, end_date)
+    logger.info(f"窗口内交易日: {trading_days}")
+    
+    # 找出缺失的交易日
+    missing_dates = get_missing_dates(conn, trading_days)
+    logger.info(f"缺失交易日: {missing_dates}")
+    
+    if not missing_dates:
+        logger.info("✅ 无缺口，所有交易日数据已齐")
+        conn.close()
+        return
+    
+    # 仅回填缺失日期
     all_stocks = get_stock_list(conn)
     logger.info(f"总股票数: {len(all_stocks)}")
     
-    pending = get_pending_stocks(conn, all_stocks)
-    logger.info(f"待回填: {len(pending)}")
+    # 清理旧 progress（新窗口新开始）
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM backfill_progress WHERE job_name='backfill_stock_daily'")
+    conn.commit()
     
     total_written = 0
-    total_done = len(all_stocks) - len(pending)
     failed = 0
     
-    for i, (code, name) in enumerate(pending):
+    for i, (code, name) in enumerate(all_stocks):
         try:
-            rows = fetch_stock_hist(code, START_DATE, END_DATE)
+            rows = fetch_stock_hist(code, missing_dates[0], missing_dates[-1])
+            # 只保留缺失日期的行
+            rows = [r for r in rows if r["date"] in missing_dates]
             if rows:
                 written = upsert_stock_daily(conn, rows)
                 total_written += written
@@ -208,21 +260,19 @@ def main():
             else:
                 update_progress(conn, code, "done", 0)
             
-            total_done += 1
             if (i + 1) % 50 == 0:
-                logger.info(f"进度: {total_done}/{len(all_stocks)} | 本批写入: {total_written} | 失败: {failed}")
+                logger.info(f"进度: {i+1}/{len(all_stocks)} | 写入: {total_written} | 失败: {failed}")
             
-            # Rate limit: 1-2s random delay (mootdx is more tolerant)
             time.sleep(1.0 + random.random() * 1.0)
             
         except Exception as e:
             logger.error(f"Failed {code}: {e}")
             update_progress(conn, code, "error", 0)
             failed += 1
-            time.sleep(2)  # Longer delay on error
+            time.sleep(2)
     
     logger.info("=" * 60)
-    logger.info(f"回填完成: {total_done}/{len(all_stocks)} | 写入: {total_written} | 失败: {failed}")
+    logger.info(f"缺口补齐完成: {len(all_stocks)} 只 | 写入: {total_written} | 失败: {failed}")
     logger.info("=" * 60)
     conn.close()
 
