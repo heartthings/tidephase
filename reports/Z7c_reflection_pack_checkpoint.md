@@ -173,7 +173,7 @@ note = '仅记账; 实际触发=guanshi workspace qwenpaw cron; 流程=先GET re
 [Z7c] 反思层证据包: V004 + reflection_pack + route_map配置化 + POST /reflection 扩列
 ```
 
-**Commit hash**: (pending)
+**Commit hash**: 37af45d
 
 ---
 
@@ -189,3 +189,68 @@ note = '仅记账; 实际触发=guanshi workspace qwenpaw cron; 流程=先GET re
 ---
 
 **铸码 · 2026-10-10 20:05**
+
+---
+
+## Z7c-fix 整改段（2026-10-10 23:00 督军验收单）
+
+**Commit**: b422c35 `[Z7c-fix] 整改三件: FAIL-1 空metric兜底补发gap + 整改-3 prediction ORDER BY自适应 + 部署生效`
+
+### FAIL-1（闸门c·P0）：空 metric 兜底补发 FALSIFY_METRIC_MISSING gap
+
+**根因**: `_resolve_metric_route` 的 `if not metric:` 分支，兜底命中时直接 `metric = fallback` 静默降级，未发 gap。
+
+**修复 diff**:
+```diff
++        # Z7c-fix: 兜底命中也必须显式记录 gap，绝不静默降级
++        gaps.append({"section": section, "code": "FALSIFY_METRIC_MISSING",
++                     "reason": f"metric empty, fell back to category_default['{category}']='{fallback}'",
++                     "affected": "S2"})
+         metric = fallback
+```
+
+**复测输出**:
+```
+gap codes: ['SECTOR_DAILY_EMPTY', 'VOLUME_QUERY_ERROR', 'FALSIFY_METRIC_MISSING', 'REGIME_DAILY_EMPTY', 'REGIME_MISSING']
+FALSIFY_METRIC_MISSING present: True
+  detail: {"section": "S2", "code": "FALSIFY_METRIC_MISSING", "reason": "metric empty, fell back to category_default['continuation']='sector.pct'", "affected": "S2"}
+S2 routed_table: sector_daily
+S2 routed_column: pct
+```
+✅ 通过。
+
+### 整改-2（P0·部署缺口）：B5 commit 生效
+
+**操作**: `docker restart market-api` → healthy → 复测三项。
+
+**复测输出**:
+1. P-336 gaps 含 FALSIFY_METRIC_MISSING ✅ + 量能 gap 变为 VOLUME_QUERY_ERROR（B5 语义）✅
+2. 冒烟决策 P-SMOKE-Z7CFIX（falsify.metric='bad;metric'）→ FALSIFY_METRIC_INVALID ✅, S2 routed_table=None ✅
+3. 隔夜 global_daily 按 trade_cal 取前一交易日（B5 逻辑，代码已在 2319e65 中，本次随容器重启生效）
+
+### 整改-3（P2）：/data/prediction?limit=1 → 500
+
+**根因**: 通用 `/data/{table}` handler 硬编码 `ORDER BY date[, code]`，prediction 表无 date 列。
+
+**修复**: 新增 `_detect_table_sort()` 函数，通过 information_schema 探测表列，自适应选择排序列（date → created_at → ts → pub_ts → 不排序），结果缓存 5min。同步修复日期过滤、游标分页、next_cursor 计算。
+
+**复测输出**:
+```
+TEST 3a: /data/prediction?limit=1 → HTTP 200, rows=1, prediction_id=P-SMOKE-Z7CFIX, created_at=2026-10-10T22:59:05
+TEST 3b: /data/index_daily?limit=1 → HTTP 200, rows=1, date=2026-10-09 code=sz399006
+```
+✅ 通过，回归无影响。
+
+### 冒烟清理
+
+```
+prediction deleted: 1 rows (actor='smoke_test')
+reflection deleted: 0 rows
+prediction smoke_test remaining: 0
+reflection smoke_test remaining: 0
+guanshi reflection rows: 7 (未触碰)
+```
+
+---
+
+**铸码 · 2026-10-10 23:00 整改完成**
