@@ -116,8 +116,46 @@ def _nearest_trade_day(trade_days: list, target: date) -> date:
     return trade_days[0]
 
 
+def _nearest_trade_day_before(trade_days: list, target: date) -> date:
+    """B5 修复: 获取 target 之前（不含 target 当天）的最近交易日。
+    用于隔夜数据查询（如周一应取上周五）。
+    """
+    if not trade_days:
+        return target - timedelta(days=1)
+    for d in reversed(trade_days):
+        if d < target:
+            return d
+    # 如果 trade_days 全 >= target，返回 target 前一天
+    return target - timedelta(days=1)
+
+
+# B5 安全白名单: metric 必须匹配 ^table.column$ 格式（纯字母数字+下划线）
+_METRIC_PATTERN = re.compile(r'^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$')
+_IDENT_PATTERN = re.compile(r'^[a-z_][a-z0-9_]*$')
+
+
+def _validate_metric_or_reject(metric_raw: str, gaps: list, section: str) -> Optional[str]:
+    """B5 P0-安全: 校验 metric 是否为合法 table.column 格式。
+    不匹配 → 返回 FALSIFY_METRIC_INVALID gap, 绝不拼 SQL。
+    """
+    if not metric_raw or not isinstance(metric_raw, str):
+        return metric_raw  # 空值走 category_default 兜底
+    if _METRIC_PATTERN.match(metric_raw):
+        return metric_raw
+    # 不匹配白名单
+    gaps.append({
+        "section": section,
+        "code": "FALSIFY_METRIC_INVALID",
+        "reason": f"metric '{metric_raw}' 不匹配白名单 ^table.column$（可能为非标准 schema）",
+        "affected": f"{section}.falsify",
+    })
+    return None
+
+
 def _resolve_metric_route(metric: str, category: str, route_map: dict, gaps: list, section: str) -> Optional[dict]:
-    """解析 metric 到 {table, column, dim}. 匹配不到走 category_default 兜底."""
+    """解析 metric 到 {table, column, dim}. 匹配不到走 category_default 兜底.
+    B5 安全加固: table/column 必须通过 _IDENT_PATTERN 校验。
+    """
     if not metric:
         # 空 metric → category_default
         cat_def = route_map.get("category_default", {})
@@ -129,15 +167,29 @@ def _resolve_metric_route(metric: str, category: str, route_map: dict, gaps: lis
             return None
         metric = fallback
 
+    # B5: 校验 metric 格式
+    if not _METRIC_PATTERN.match(metric):
+        # 可能是非标准 metric（如 JSON 字符串），拒绝拼 SQL
+        gaps.append({"section": section, "code": "FALSIFY_METRIC_INVALID",
+                      "reason": f"metric '{metric}' 不匹配白名单 ^table.column$",
+                      "affected": "S2"})
+        return None
+
     # 形如 "table.column" 直接拆
     if "." in metric:
         parts = metric.split(".", 1)
+        table_guess, col_guess = parts[0], parts[1]
+        # B5: 校验 table 和 column 标识符
+        if not _IDENT_PATTERN.match(table_guess) or not _IDENT_PATTERN.match(col_guess):
+            gaps.append({"section": section, "code": "FALSIFY_METRIC_INVALID",
+                          "reason": f"table/column 含非法字符: {table_guess}.{col_guess}",
+                          "affected": "S2"})
+            return None
         # 先查 metric_routes 精确匹配
         for mr in route_map.get("metric_routes", []):
             if mr["match"] == metric:
                 return {"table": mr["table"], "column": mr["column"], "dim": mr.get("dim")}
         # 尝试 table.column 直解
-        table_guess, col_guess = parts[0], parts[1]
         return {"table": table_guess, "column": col_guess, "dim": "code"}
 
     # 查 metric_routes
@@ -277,7 +329,7 @@ def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, 
         gaps.append({"section": "S1", "code": "SECTOR_ERROR", "reason": str(e), "affected": "S1.sector"})
         result["sector_concentration"] = {}
 
-    # ④ 量能
+    # ④ 量能 (B5 修复: 区分 VOLUME_EMPTY vs VOLUME_QUERY_ERROR)
     try:
         cur.execute("""
             SELECT amount FROM index_daily
@@ -304,29 +356,44 @@ def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, 
         """, (window_start, nearest))
         mkt_total = cur.fetchone()[0]
 
+        # B5: 安全计算 5d avg（避免 idx_before < 0 时 KeyError）
+        if idx_before >= 0:
+            window_days_count = max(len(trade_days[max(start_idx, 0):idx_before + 1]), 1)
+        else:
+            window_days_count = 5  # 兜底
         result["volume"] = {
             "index_amount_today": today_amount,
             "index_amount_5d_avg": float(avg_amount) if avg_amount else None,
             "market_amount_today": float(mkt_today) if mkt_today else None,
-            "market_amount_5d_avg": float(mkt_total / max(len(trade_days[start_idx:idx_before + 1]), 1)) if mkt_total else None,
+            "market_amount_5d_avg": float(mkt_total / window_days_count) if mkt_total else None,
         }
+        # B5: 查得到但窗口内无行 → VOLUME_EMPTY
+        if not mkt_today and not today_amount:
+            gaps.append({"section": "S1", "code": "VOLUME_EMPTY",
+                          "reason": f"stock_daily/index_daily 窗口 {window_start}~{nearest} 内无数据",
+                          "affected": "S1.volume"})
     except Exception as e:
-        gaps.append({"section": "S1", "code": "VOLUME_ERROR", "reason": str(e), "affected": "S1.volume"})
+        # B5: SQL/连接异常 → VOLUME_QUERY_ERROR，附异常原文
+        gaps.append({"section": "S1", "code": "VOLUME_QUERY_ERROR",
+                      "reason": f"窗口 {window_start}~{nearest} 查询异常: {type(e).__name__}: {e}",
+                      "affected": "S1.volume"})
         result["volume"] = {}
 
-    # ⑤ 隔夜 global_daily (决策日前一自然日)
-    prev_natural = decision_date - timedelta(days=1)
+    # ⑤ 隔夜 global_daily (B5 修复: 按 trade_cal 取决策日前最近交易日，非自然日)
+    # 避免周一/节假日后误报（如 2026-08-30 周日无交易数据）
+    prev_trade_day = _nearest_trade_day_before(trade_days, decision_date)
     try:
         cur.execute("""
             SELECT market, code, name, close, pct
             FROM global_daily
             WHERE date = %s
             ORDER BY market, code
-        """, (prev_natural,))
+        """, (prev_trade_day,))
         result["global_overnight"] = [dict(r) for r in cur.fetchall()]
         if not result["global_overnight"]:
             gaps.append({"section": "S1", "code": "GLOBAL_OVERNIGHT_EMPTY",
-                          "reason": f"No global_daily for date={prev_natural}", "affected": "S1.global"})
+                          "reason": f"No global_daily for trade_date={prev_trade_day} (decision_date={decision_date})",
+                          "affected": "S1.global"})
     except Exception as e:
         gaps.append({"section": "S1", "code": "GLOBAL_ERROR", "reason": str(e), "affected": "S1.global"})
         result["global_overnight"] = []
@@ -374,13 +441,26 @@ def _build_s2(cur, prediction: dict, window_start: date, window_end: date,
     direction = falsify.get("direction", "")
     threshold = falsify.get("threshold")
 
-    route = _resolve_metric_route(metric_raw, category, route_map, gaps, "S2")
+    # B5 P0-安全: 先校验 metric 格式，不合法直接拒绝
+    validated_metric = _validate_metric_or_reject(metric_raw, gaps, "S2")
+    if validated_metric is None and metric_raw:
+        # 校验失败，已记录 FALSIFY_METRIC_INVALID gap
+        return {"metric": metric_raw, "route": None, "threshold_check": None}
+
+    route = _resolve_metric_route(validated_metric or metric_raw, category, route_map, gaps, "S2")
     if not route:
         return {"metric": metric_raw, "route": None, "threshold_check": None}
 
     table = route["table"]
     column = route["column"]
     dim = route.get("dim")
+
+    # B5: 二次校验 routed table/column（防止 route_map 本身被注入）
+    if not _IDENT_PATTERN.match(table) or not _IDENT_PATTERN.match(column):
+        gaps.append({"section": "S2", "code": "FALSIFY_METRIC_INVALID",
+                      "reason": f"routed table/column 含非法字符: {table}.{column}",
+                      "affected": "S2"})
+        return {"metric": metric_raw, "route": None, "threshold_check": None}
 
     # 构建查询
     where_clauses = ["date BETWEEN %s AND %s"]
@@ -669,15 +749,22 @@ def assemble_reflection_pack(get_conn_fn, decision_id: str,
             trade_days = _trade_days_near(cur, decision_date)
             decision_td = _nearest_trade_day(trade_days, decision_date)
 
-            # 默认窗口: 决策日+1 ~ check_date
+            # 默认窗口: 决策日 ~ check_date（B5 修复: 含 start==end 当日情形）
             if window_start_override:
                 ws = datetime.strptime(window_start_override, "%Y-%m-%d").date()
             else:
-                ws = decision_td + timedelta(days=1)
+                ws = decision_td  # B5: 从决策日当天开始（不再 +1 天导致倒挂）
             if window_end_override:
                 we = datetime.strptime(window_end_override, "%Y-%m-%d").date()
             else:
                 we = check_date if check_date else decision_td + timedelta(days=3)
+
+            # B5: 防倒挂保护
+            if ws > we:
+                ws, we = we, ws
+                gaps.append({"section": "S3", "code": "WINDOW_INVERTED_CORRECTED",
+                              "reason": f"窗口起止倒挂 {ws}~{we}，已自动修正",
+                              "affected": "S3"})
 
             # 3. route_map
             route_map = get_route_map(get_conn_fn)

@@ -28,43 +28,69 @@ def load_secrets():
         return yaml.safe_load(f) or {}
 
 
-def fetch_emotion(secrets) -> list:
-    """Fetch 30-day CGL/YLL series from longhu Emotion endpoint."""
+def fetch_emotion(secrets, st: int = 250) -> list:
+    """Fetch CGL/YLL series from longhu Emotion endpoint.
+
+    B4 修复(2026-10-10): 参数按 Java 源码逐参复刻（督军实测验证）。
+    依据: SpeculativePerformanceDataParamBuilder.java:71-96
+          TradingDashboardCrawler.java:329-336
+    正确请求: st=250(源端上限), index=0, apiv=w39, VerSion=5.18.0.2
+    响应: {"ZY":[{"CGL":"76.19","YLL":"2.10","Day":"2026-10-09"},...], "errcode":"0"}
+    解析: ZY[i].Day/CGL/YLL → sentiment_daily(date, dbcgl, dbyll)
+    """
     longhu = secrets.get("longhu", {})
     hosts = longhu.get("hosts", {})
     apphis = hosts.get("apphis", "")
     device_id = longhu.get("emotion_device_id", "")
 
     if not apphis or not device_id:
-        logger.error("Missing longhu Emotion credentials")
+        logger.error("Missing longhu Emotion credentials (apphis host / emotion_device_id)")
         return []
 
+    # B4: 固化正确参数（不再用错误的 app/DeviceId/version）
     payload = {
-        "app": "app_cjh",
-        "DeviceId": device_id,
-        "version": "64",
-        "c": "Emotion",
         "a": "GetMoneyDate",
+        "c": "Emotion",
+        "st": str(st),
+        "index": "0",
+        "apiv": "w39",
+        "PhoneOSNew": "1",
+        "VerSion": "5.18.0.2",
+        "DeviceID": device_id,
+    }
+    headers = {
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; SM-G9810 Build/TP1A.220624.014)",
+        "Host": "apphis.longhuvip.com",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     }
 
     try:
-        resp = requests.post(apphis, data=payload, timeout=30)
+        resp = requests.post(apphis, data=payload, headers=headers, timeout=30)
         resp.raise_for_status()
         data = resp.json()
 
-        zy_list = data.get("ZY", [])
+        # B4: 只认 ZY 键，不再兜底顶层 list（那是请求参数不全的误判）
+        zy_list = data.get("ZY")
+        if not zy_list or not isinstance(zy_list, list):
+            logger.warning(
+                f"[j_sentiment_calc] Emotion 返回空载荷 keys={list(data.keys())} "
+                f"errcode={data.get('errcode')}。请求参数可能变更。"
+            )
+            return []
+
         rows = []
         for item in zy_list:
-            date_str = item.get("Day", "")
-            cgl = float(item.get("CGL", 0)) if item.get("CGL") else None
-            yll = float(item.get("YLL", 0)) if item.get("YLL") else None
-            if date_str:
-                rows.append({
-                    "date": date_str,
-                    "dbcgl": cgl,
-                    "dbyll": yll,
-                })
-        logger.info(f"Fetched {len(rows)} days from Emotion endpoint")
+            if not isinstance(item, dict):
+                continue
+            day = item.get("Day", "")
+            if not day:
+                continue
+            rows.append({
+                "date": day,
+                "dbcgl": float(item["CGL"]) if item.get("CGL") else None,
+                "dbyll": float(item["YLL"]) if item.get("YLL") else None,
+            })
+        logger.info(f"Fetched {len(rows)} days from Emotion endpoint (st={st})")
         return rows
     except Exception as e:
         logger.error(f"Emotion fetch failed: {e}")
@@ -111,10 +137,21 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     # Fetch Emotion data
     rows = fetch_emotion(secrets)
     if not rows:
+        # B4: 空载荷 → 写 MISS 行 + 告警（不再误判为"token 过期/源端空"）
         elapsed = time.time() - t0
+        note = f"MISS: Emotion 端点返回空载荷（请求参数可能变更），elapsed={elapsed:.1f}s"
+        logger.warning(f"[j_sentiment_calc] {note}")
+        try:
+            ingest_logger.log_run(
+                "j_sentiment_calc", "D3", "sentiment_daily", "longhu", "MISS",
+                rows_in=0, rows_written=0, rows_quarantined=0,
+                note=note, trigger=trigger,
+            )
+        except Exception as e:
+            logger.warning(f"[j_sentiment_calc] ingest_log MISS failed: {e}")
         return {"success": False, "source_used": "longhu",
                 "rows_in": 0, "rows_written": 0, "rows_quarantined": 0,
-                "note": f"FAIL: no emotion data, elapsed={elapsed:.1f}s"}
+                "note": note}
 
     # Upsert
     written = upsert_sentiment_daily(conn, rows)

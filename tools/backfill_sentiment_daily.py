@@ -38,42 +38,66 @@ def get_tsdb_conn(secrets):
         user="postgres", password=db.get("duser_admin_password", ""),
     )
 
-def fetch_emotion(secrets) -> list:
-    """Fetch 30-day CGL/YLL series from longhu Emotion endpoint."""
+def fetch_emotion(secrets, st: int = 250) -> list:
+    """Fetch CGL/YLL series from longhu Emotion endpoint.
+
+    B4 修复(2026-10-10): 参数按 Java 源码逐参复刻（督军实测验证）。
+    依据: SpeculativePerformanceDataParamBuilder.java:71-96
+          TradingDashboardCrawler.java:329-336
+    正确请求: st=250(源端上限), index=0, apiv=w39, VerSion=5.18.0.2
+    """
     longhu = secrets.get("longhu", {})
     hosts = longhu.get("hosts", {})
     apphis = hosts.get("apphis", "")
     device_id = longhu.get("emotion_device_id", "")
-    
+
     if not apphis or not device_id:
-        logger.error("Missing longhu Emotion credentials")
+        logger.error("Missing longhu Emotion credentials (apphis host / emotion_device_id)")
         return []
-    
+
+    # B4: 固化正确参数
     payload = {
-        "app": "app_cjh",
-        "DeviceId": device_id,
-        "version": "64",
-        "c": "Emotion",
         "a": "GetMoneyDate",
+        "c": "Emotion",
+        "st": str(st),
+        "index": "0",
+        "apiv": "w39",
+        "PhoneOSNew": "1",
+        "VerSion": "5.18.0.2",
+        "DeviceID": device_id,
     }
-    
+    headers = {
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; SM-G9810 Build/TP1A.220624.014)",
+        "Host": "apphis.longhuvip.com",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    }
+
     try:
-        resp = requests.post(apphis, data=payload, timeout=30)
+        resp = requests.post(apphis, data=payload, headers=headers, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        
-        zy_list = data.get("ZY", [])
+
+        # B4: 只认 ZY 键
+        zy_list = data.get("ZY")
+        if not zy_list or not isinstance(zy_list, list):
+            logger.warning(
+                f"Emotion 返回空载荷 keys={list(data.keys())} errcode={data.get('errcode')}"
+            )
+            return []
+
         rows = []
         for item in zy_list:
-            date_str = item.get("Day", "")
-            cgl = float(item.get("CGL", 0)) if item.get("CGL") else None
-            yll = float(item.get("YLL", 0)) if item.get("YLL") else None
+            if not isinstance(item, dict):
+                continue
+            day = item.get("Day", "")
+            if not day:
+                continue
             rows.append({
-                "date": date_str,
-                "dbcgl": cgl,
-                "dbyll": yll,
+                "date": day,
+                "dbcgl": float(item["CGL"]) if item.get("CGL") else None,
+                "dbyll": float(item["YLL"]) if item.get("YLL") else None,
             })
-        logger.info(f"Fetched {len(rows)} days from Emotion endpoint")
+        logger.info(f"Fetched {len(rows)} days from Emotion endpoint (st={st})")
         return rows
     except Exception as e:
         logger.error(f"Emotion fetch failed: {e}")

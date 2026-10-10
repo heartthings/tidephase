@@ -115,7 +115,10 @@ def _fetch_from_source(source_name: str, job_ctx) -> list:
 
 
 def _fetch_tencent() -> list:
-    """Fetch from Tencent ifzq API."""
+    """Fetch from Tencent ifzq API.
+    B1 修复(2026-10-10): 计算 pct = (close - prev_close) / prev_close * 100。
+    请求 10 天数据以确保最后一天有前收可算。
+    """
     import requests
     import json
     rows = []
@@ -124,39 +127,48 @@ def _fetch_tencent() -> list:
 
     for code, name in INDEX_CODES:
         try:
+            # B1: 请求 10 天（多取几天以确保有 prev_close）
             resp = session.get(
                 "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
-                params={"param": f"{code},day,,,5,qfq", "_var": "kline_dayqfq"},
+                params={"param": f"{code},day,,,10,qfq", "_var": "kline_dayqfq"},
                 timeout=10
             )
             if resp.status_code == 200:
-                # Response is JSONP: kline_dayqfq={...}
                 text = resp.text.strip()
                 if "=" in text:
                     text = text.split("=", 1)[1]
                 data = json.loads(text)
                 stock_data = data.get("data", {}).get(code, {})
                 day_data = stock_data.get("day", stock_data.get("qfqday", []))
+                prev_close = None
                 for item in day_data:
                     if len(item) >= 6:
+                        close = float(item[2])
+                        pct = None
+                        if prev_close and prev_close > 0:
+                            pct = round((close - prev_close) / prev_close * 100, 4)
                         rows.append({
                             "date": item[0],
                             "code": code,
                             "name": name,
                             "open": float(item[1]),
-                            "close": float(item[2]),
+                            "close": close,
                             "high": float(item[3]),
                             "low": float(item[4]),
                             "volume": float(item[5]) if len(item) > 5 else 0,
                             "amount": 0,
+                            "pct": pct,
                         })
+                        prev_close = close
         except Exception as e:
             logger.warning(f"Tencent index fetch failed for {code}: {e}")
     return rows
 
 
 def _fetch_mootdx() -> list:
-    """Fetch from mootdx."""
+    """Fetch from mootdx.
+    B1 修复: 计算 pct。mootdx 返回的列可能包含 pctChange，否则手算。
+    """
     rows = []
     try:
         from mootdx.quotes import Quotes
@@ -165,20 +177,32 @@ def _fetch_mootdx() -> list:
             try:
                 symbol = code[2:]
                 market = 1 if code.startswith("sh") else 0
-                data = api.bars(category=9, market=market, code=symbol, count=5)
+                data = api.bars(category=9, market=market, code=symbol, count=10)
                 if data is not None and not data.empty:
+                    prev_close = None
                     for _, row in data.iterrows():
+                        close = float(row.get("close", 0))
+                        # mootdx 可能有 pctChange 列
+                        pct_raw = row.get("pctChange") if "pctChange" in row.index else None
+                        if pct_raw is not None and pct_raw == pct_raw:
+                            pct = float(pct_raw)
+                        elif prev_close and prev_close > 0:
+                            pct = round((close - prev_close) / prev_close * 100, 4)
+                        else:
+                            pct = None
                         rows.append({
                             "date": str(row.get("datetime", ""))[:10],
                             "code": code,
                             "name": name,
                             "open": float(row.get("open", 0)),
-                            "close": float(row.get("close", 0)),
+                            "close": close,
                             "high": float(row.get("high", 0)),
                             "low": float(row.get("low", 0)),
                             "volume": float(row.get("vol", 0)),
                             "amount": float(row.get("amount", 0)),
+                            "pct": pct,
                         })
+                        prev_close = close
             except Exception as e:
                 logger.warning(f"mootdx index failed for {code}: {e}")
     except ImportError:
@@ -187,35 +211,45 @@ def _fetch_mootdx() -> list:
 
 
 def _fetch_akshare() -> list:
-    """Fetch from akshare."""
+    """Fetch from akshare.
+    B1 修复: 取最后 10 行，计算 pct = (close - prev_close) / prev_close * 100。
+    """
     rows = []
     try:
         import akshare as ak
-        # Map codes to akshare index symbols
         code_map = {
-            "sh000001": "000001",  # 上证指数
-            "sz399001": "399001",  # 深证成指
-            "sz399006": "399006",  # 创业板指
-            "sh000300": "000300",  # 沪深300
-            "sh000016": "000016",  # 上证50
-            "sh000688": "000688",  # 科创50
+            "sh000001": "000001",
+            "sz399001": "399001",
+            "sz399006": "399006",
+            "sh000300": "000300",
+            "sh000016": "000016",
+            "sh000688": "000688",
         }
         for code, name in INDEX_CODES:
             try:
                 idx = code_map.get(code, code[2:])
                 df = ak.stock_zh_index_daily(symbol=f"sh{idx}" if code.startswith("sh") else f"sz{idx}")
                 if df is not None and not df.empty:
-                    latest = df.iloc[-1]
-                    rows.append({
-                        "date": str(latest.get("date", ""))[:10],
-                        "code": code,
-                        "name": name,
-                        "open": float(latest.get("open", 0)),
-                        "close": float(latest.get("close", 0)),
-                        "high": float(latest.get("high", 0)),
-                        "low": float(latest.get("low", 0)),
-                        "volume": float(latest.get("volume", 0)),
-                    })
+                    # B1: 取最后 10 行以计算 pct
+                    tail = df.tail(10)
+                    prev_close = None
+                    for i, (_, row) in enumerate(tail.iterrows()):
+                        close = float(row.get("close", 0))
+                        pct = None
+                        if prev_close and prev_close > 0:
+                            pct = round((close - prev_close) / prev_close * 100, 4)
+                        rows.append({
+                            "date": str(row.get("date", ""))[:10],
+                            "code": code,
+                            "name": name,
+                            "open": float(row.get("open", 0)),
+                            "close": close,
+                            "high": float(row.get("high", 0)),
+                            "low": float(row.get("low", 0)),
+                            "volume": float(row.get("volume", 0)),
+                            "pct": pct,
+                        })
+                        prev_close = close
             except Exception as e:
                 logger.warning(f"akshare index failed for {code}: {e}")
     except ImportError:
@@ -224,7 +258,9 @@ def _fetch_akshare() -> list:
 
 
 def _fetch_eastmoney() -> list:
-    """Fetch from eastmoney."""
+    """Fetch from eastmoney.
+    B1 修复: 取最后 10 根 K 线，计算 pct。
+    """
     import requests
     rows = []
     session = requests.Session()
@@ -249,19 +285,29 @@ def _fetch_eastmoney() -> list:
                 data = resp.json()
                 klines = data.get("data", {}).get("klines", [])
                 if klines:
-                    parts = klines[-1].split(",")
-                    if len(parts) >= 7:
-                        rows.append({
-                            "date": parts[0],
-                            "code": code,
-                            "name": name,
-                            "open": float(parts[1]),
-                            "close": float(parts[2]),
-                            "high": float(parts[3]),
-                            "low": float(parts[4]),
-                            "volume": float(parts[5]),
-                            "amount": float(parts[6]),
-                        })
+                    # B1: 取最后 10 根，计算 pct
+                    tail = klines[-10:] if len(klines) >= 2 else klines
+                    prev_close = None
+                    for kline_str in tail:
+                        parts = kline_str.split(",")
+                        if len(parts) >= 7:
+                            close = float(parts[2])
+                            pct = None
+                            if prev_close and prev_close > 0:
+                                pct = round((close - prev_close) / prev_close * 100, 4)
+                            rows.append({
+                                "date": parts[0],
+                                "code": code,
+                                "name": name,
+                                "open": float(parts[1]),
+                                "close": close,
+                                "high": float(parts[3]),
+                                "low": float(parts[4]),
+                                "volume": float(parts[5]),
+                                "amount": float(parts[6]),
+                                "pct": pct,
+                            })
+                            prev_close = close
         except Exception as e:
             logger.warning(f"eastmoney index failed for {code}: {e}")
     return rows

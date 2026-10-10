@@ -41,12 +41,23 @@ ENDPOINT_MAP = {
         "c": "GetPlateInfo_w38",
         "auth": "device_3167791",
     },
-    # D3 情绪 → apphis, 无账号认证
+    # D3 情绪 → apphis, DeviceID 认证
+    # B4 修复(2026-10-10): 参数按 Java 源码固化（督军实测验证）
+    #   依据: SpeculativePerformanceDataParamBuilder.java:71-96
+    #         TradingDashboardCrawler.java:329-336
+    #   正确请求: st=250, index=0, apiv=w39, VerSion=5.18.0.2
+    #   响应: {"ZY":[{"CGL":"76.19","YLL":"2.10","Day":"2026-10-09"},...], "errcode":"0"}
     "Emotion": {
         "host": "apphis",
         "a": "GetMoneyDate",
         "c": "Emotion",
         "auth": "emotion_device",
+        "fixed_params": {
+            "st": "250",       # 源端上限 250 条
+            "index": "0",
+            "apiv": "w39",
+            "VerSion": "5.18.0.2",
+        },
     },
     # D3 市场雷达 → apphwhq, DeviceID 认证
     "Radar": {
@@ -276,6 +287,9 @@ class LonghuAdapter(BaseAdapter):
             "VerSion": "5.21.0.0",
             "apiv": "w42",
         }
+        # B4: 端点级固定参数覆盖（Emotion 等需要特定 apiv/VerSion/st）
+        if "fixed_params" in ep_config:
+            req_params.update(ep_config["fixed_params"])
         req_params.update(auth_params)
         req_params.update(extra_params)
 
@@ -375,31 +389,30 @@ class LonghuAdapter(BaseAdapter):
             return [data] if data else []
 
     def _parse_emotion(self, data: dict) -> list:
-        """解析 Emotion 端点：CGL/YLL 30日序列。
-        Z7 修复：实测响应顶层为 list（空列表）与 errcode，
-        兼容 list（顶层列表）/ ZY（嵌套列表）双键。
+        """解析 Emotion 端点：CGL/YLL 序列。
+        B4 修复(2026-10-10): 只认 ZY 键（Java 源码 emotionRoot.path("ZY").get(0)）。
+        删除 Z7 错误的"顶层 list 兜底"——那是请求参数不全导致源端返回空载荷的误判。
+        空载荷 → 返回空 list → 上层 fetch() 会抛 SourceError(EMPTY)。
         """
         rows = []
-
-        # 优先取 ZY 键（旧格式），兜底取顶层 list（新格式/实测格式）
         zy_list = data.get("ZY")
-        if zy_list is None:
-            # 实测：响应顶层直接是 list（errcode + 空列表）
-            # 尝试从 data 中找到第一个 list 值
-            for v in data.values():
-                if isinstance(v, list):
-                    zy_list = v
-                    break
-        if not zy_list:
-            zy_list = []
+        if not zy_list or not isinstance(zy_list, list):
+            logger.warning(
+                f"[longhu.Emotion] ZY 键为空或缺失，keys={list(data.keys())}。"
+                "可能原因：请求参数不全（需 st/index/apiv/VerSion/DeviceID 五参齐全）"
+            )
+            return []
 
         for item in zy_list:
             if not isinstance(item, dict):
                 continue
+            day = item.get("Day", "")
+            if not day:
+                continue
             rows.append({
-                "date": item.get("Day", ""),
-                "dbcgl": float(item.get("CGL", 0)) if item.get("CGL") else None,
-                "dbyll": float(item.get("YLL", 0)) if item.get("YLL") else None,
+                "date": day,
+                "dbcgl": float(item["CGL"]) if item.get("CGL") else None,
+                "dbyll": float(item["YLL"]) if item.get("YLL") else None,
             })
         return rows
 
