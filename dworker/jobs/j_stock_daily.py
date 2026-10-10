@@ -6,12 +6,16 @@ j_stock_daily - 全市场个股日线
   2. tencent qt.gtimg.cn 批量实时行情（此接口可用）
   3. 解析 ~ 分隔字段写入 stock_daily
 源链：tencent → mootdx
+
+门禁：trade_cal.is_open=0 时 SKIP，禁止落库（Z7 修复）。
 """
 import json
 import logging
 import math
 import time
 from datetime import datetime
+
+from dworker.core.calendar_gate import check_trade_gate
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,25 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     """Execute j_stock_daily."""
     t0 = time.time()
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # ── 日历门禁：休市/非交易日不写业务表 ──
+    gate = check_trade_gate(conn, market="SSE", check_date=today)
+    if not gate["allowed"]:
+        note = f"SKIP: {gate['reason']}"
+        logger.info(f"[j_stock_daily] {note}")
+        try:
+            ingest_logger.log_run(
+                "j_stock_daily", "D2", "stock_daily", "none", "SKIP",
+                rows_in=0, rows_written=0, rows_quarantined=0,
+                note=note, trigger=trigger,
+            )
+        except Exception as e:
+            logger.warning(f"[j_stock_daily] ingest_log SKIP failed: {e}")
+        return {
+            "success": True, "source_used": "none",
+            "rows_in": 0, "rows_written": 0, "rows_quarantined": 0,
+            "note": note,
+        }
 
     # Step 1: Get stock list
     stock_codes = _get_stock_list()

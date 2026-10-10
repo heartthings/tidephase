@@ -1,0 +1,31 @@
+# global_daily date 字段约定
+
+> Z7 · 2026-10-10 · 铸码
+
+## 约定
+
+`global_daily.date` = **北京时间接收日**（= 当地市场收盘日的次日北京时间）。
+
+| 场景 | 当地收盘 | 北京接收 | global_daily.date |
+|------|---------|---------|-------------------|
+| 美股周五 | 10-09 Fri close (ET) | 10-10 Sat 凌晨 | `2026-10-10` |
+| 港股周五 | 10-09 Fri close (HKT) | 10-09 Fri 16:00+ | `2026-10-09` |
+| 商品周五 | 10-09 Fri close (ET) | 10-10 Sat 凌晨 | `2026-10-10` |
+
+## 原因
+
+- `j_global_overnight` 在北京时间凌晨运行，取 `datetime.now()` 作为 date
+- 美股/商品在北京周六凌晨收盘，接收日 = 周六
+- 港股在北京周五下午收盘，接收日 = 周五
+
+## 与 A 股的区别
+
+| 表 | date 含义 | 门禁 |
+|----|----------|------|
+| `stock_daily` / `index_daily` | A 股交易日 | trade_cal.is_open=0 → SKIP |
+| `global_daily` | 北京接收日 | 不受 A 股 trade_cal 约束 |
+
+## 验证
+
+- 2026-10-10（周六）global_daily 有 7 行：DJI/SPX/IXIC/HSI/GC/SI/CL
+- 这些是美东 10-09 周五收盘数据，北京 10-10 凌晨接收，符合约定 ✅

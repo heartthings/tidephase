@@ -4,11 +4,15 @@ j_index_daily - 六大指数日K
 六大指数：sh000001(上证), sz399001(深证成指), sz399006(创业板指),
           sh000300(沪深300), sh000016(上证50), sh000688(科创50)
 源链：mootdx → tencent → akshare → eastmoney
+
+门禁：trade_cal.is_open=0 时 SKIP，禁止落库（Z7 修复）。
 """
 import json
 import logging
 import time
 from datetime import datetime
+
+from dworker.core.calendar_gate import check_trade_gate
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,25 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     """Execute j_index_daily."""
     t0 = time.time()
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # ── 日历门禁：休市/非交易日不写业务表 ──
+    gate = check_trade_gate(conn, market="SSE", check_date=today)
+    if not gate["allowed"]:
+        note = f"SKIP: {gate['reason']}"
+        logger.info(f"[j_index_daily] {note}")
+        try:
+            ingest_logger.log_run(
+                "j_index_daily", "D1", "index_daily", "none", "SKIP",
+                rows_in=0, rows_written=0, rows_quarantined=0,
+                note=note, trigger=trigger,
+            )
+        except Exception as e:
+            logger.warning(f"[j_index_daily] ingest_log SKIP failed: {e}")
+        return {
+            "success": True, "source_used": "none",
+            "rows_in": 0, "rows_written": 0, "rows_quarantined": 0,
+            "note": note,
+        }
 
     all_rows = []
     source_used = None
