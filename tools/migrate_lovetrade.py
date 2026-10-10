@@ -21,12 +21,24 @@ import yaml
 
 SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 
-MYSQL_CONFIG = {
-    "host": "81.70.207.80", "port": 8010, "user": "root",
-    "password": "Gee6lXRoYRBb", "database": "lovetrade",
-    "connect_timeout": 10, "read_timeout": 600,
-    "cursorclass": pymysql.cursors.DictCursor,
-}
+
+def _load_mysql_config() -> dict:
+    """从 secrets.yaml 读取 lovetrade MySQL 凭证（禁止硬编码）。"""
+    with open(SECRETS_PATH) as f:
+        secrets = yaml.safe_load(f) or {}
+    lt = secrets.get("lovetrade", {})
+    return {
+        "host": lt.get("mysql_host", "127.0.0.1"),
+        "port": int(lt.get("mysql_port", 7511)),
+        "user": lt.get("mysql_user", "root"),
+        "password": lt.get("mysql_password", ""),
+        "database": lt.get("mysql_database", "lovetrade"),
+        "connect_timeout": 10, "read_timeout": 600,
+        "cursorclass": pymysql.cursors.DictCursor,
+    }
+
+
+MYSQL_CONFIG = _load_mysql_config()
 
 # index_type string → canonical code
 INDEX_TYPE_MAP = {
