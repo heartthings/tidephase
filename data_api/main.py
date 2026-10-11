@@ -501,20 +501,34 @@ async def data_query(
 
         # 日期过滤 (Z7c-fix + Z7-ext: 自适应日期列)
         _date_col_map = {
-            "news_telegraph": "pub_ts", "stock_news": "pub_ts", "announcements": "pub_ts",
-            "market_messages": "msg_ts",
+            "announcements": "ann_date",
             "prediction": "created_at",
             "radar_event": "ts",
             "catalyst_impact": "date",
             "catalyst_system_state": "date",
         }
-        filter_date_col = _date_col_map.get(table) or sort_info.get("date_col") or "date"
-        if start and filter_date_col:
-            sql += f" AND {filter_date_col} >= %s"
-            params.append(start)
-        if end and filter_date_col:
-            sql += f" AND {filter_date_col} <= %s"
-            params.append(end)
+        # 时间戳列用上海日历日比较。end=2026-10-09 不能写成 timestamptz <= 当天 00:00，否则整天被排除。
+        _ts_date_cols = {
+            "news_telegraph": "pub_ts",
+            "stock_news": "pub_ts",
+            "market_messages": "msg_ts",
+        }
+        if table in _ts_date_cols:
+            day_expr = f"(({_ts_date_cols[table]} AT TIME ZONE 'Asia/Shanghai')::date)"
+            if start:
+                sql += f" AND {day_expr} >= %s"
+                params.append(start)
+            if end:
+                sql += f" AND {day_expr} <= %s"
+                params.append(end)
+        else:
+            filter_date_col = _date_col_map.get(table) or sort_info.get("date_col") or "date"
+            if start and filter_date_col:
+                sql += f" AND {filter_date_col} >= %s"
+                params.append(start)
+            if end and filter_date_col:
+                sql += f" AND {filter_date_col} <= %s"
+                params.append(end)
 
         # 代码过滤 (Z7-ext: 自适应 code 列名)
         if codes and sort_info.get("has_code"):

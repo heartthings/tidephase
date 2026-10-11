@@ -1025,7 +1025,7 @@ async def calendar_is_trading_day(date: str = None, authorization: str = None):
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""SELECT cal_date, is_open FROM trade_cal
-                       WHERE market = 'CN' AND cal_date = %s""", (check_date,))
+                       WHERE market = 'SSE' AND cal_date = %s""", (check_date,))
         row = cur.fetchone()
     conn.close()
     if not row:
@@ -1055,6 +1055,33 @@ async def calendar_trading_session(authorization: str = None):
     })
 
 
+@router.get("/api/trading/calendar/is-trading-day")
+async def calendar_is_trading_day_compat(date: str = None, authorization: str = None):
+    """query.py 旧路径。日历市场是 SSE。"""
+    return await calendar_is_trading_day(date, authorization)
+
+
+@router.get("/api/trading/calendar/trading-session")
+async def calendar_trading_session_compat(authorization: str = None):
+    return await calendar_trading_session(authorization)
+
+
+@router.get("/api/trading/calendar/in-trading-time")
+async def calendar_in_trading_time(authorization: str = None):
+    body = await calendar_trading_session(authorization)
+    data = body["data"]
+    return envelope({
+        "in_trading_time": data["is_trading_hours"],
+        "session": data["session"],
+        "datetime": data["datetime"],
+    })
+
+
+@router.get("/api/category/enabled")
+async def category_enabled_compat(authorization: str = None):
+    return await note_categories_list(authorization)
+
+
 @router.get("/api/meta/calendar/month-trading-days")
 async def calendar_month_trading_days(year: int = None, month: int = None, authorization: str = None):
     """月度交易日列表"""
@@ -1066,7 +1093,7 @@ async def calendar_month_trading_days(year: int = None, month: int = None, autho
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""SELECT cal_date, is_open FROM trade_cal
-                       WHERE market = 'CN' AND cal_date >= %s AND cal_date <= %s AND is_open = 1
+                       WHERE market = 'SSE' AND cal_date >= %s AND cal_date <= %s AND is_open = 1
                        ORDER BY cal_date""", (start, end))
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()

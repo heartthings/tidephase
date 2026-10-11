@@ -1,6 +1,6 @@
 """
 j_zt_pools - 涨停 / 炸板 / 跌停池
-目标表：zt_pool, zb_pool, dt_pool（yzt_pool 源端无带日期的昨涨今现接口，显式 MISS）
+目标表：zt_pool, zb_pool, dt_pool。yzt_pool 用上一交易日涨停池加上当日 stock_daily，不另编数。
 
 主源：同花顺 data.10jqka.com.cn/dataapi/limit_up/*
 备源：东财 push2ex（本机实测 rc=205，留着但不当主源）
@@ -84,6 +84,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
         logger.warning(f"[j_zt_pools] archive failed: {e}")
 
     written = _write_pools(conn, pools, source_used, trade_date)
+    yzt_n = _write_yzt(conn, trade_date)
     rows_in = sum(len(v) for v in pools.values())
     note = (
         f"date={trade_date} source={source_used} "
@@ -91,7 +92,8 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
         f"zb={len(pools.get('zb_pool', []))} "
         f"dt={len(pools.get('dt_pool', []))} "
         f"written={written} "
-        f"yzt_pool MISS: 同花顺无带日期的昨涨今现端点，不编数 "
+        f"yzt={yzt_n} derived from prior zt_pool plus stock_daily, "
+        f"no dated yesterday-limit endpoint "
         f"elapsed={time.time()-t0:.1f}s"
     )
     logger.info(f"[j_zt_pools] {note}")
@@ -341,3 +343,37 @@ def _clock(v):
         return None
     dt = datetime.fromtimestamp(n, TZ)
     return dt.strftime("%H:%M:%S")
+
+
+def _write_yzt(conn, trade_date: str) -> int:
+    """上一交易日涨停的股票，用当日 stock_daily 的收盘表现填昨涨今现。对不上的不写。"""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT max(cal_date) FROM trade_cal
+            WHERE market = 'SSE' AND is_open = 1 AND cal_date < %s
+        """, (trade_date,))
+        prev = cur.fetchone()[0]
+        if prev is None:
+            return 0
+        cur.execute("""
+            INSERT INTO yzt_pool (
+                date, code, name, close, pct, amount, circ_mv, turnover_rate,
+                prev_seal_amount, prev_board_days, industry, source
+            )
+            SELECT %s, z.code, COALESCE(s.name, z.name), s.close, s.pct, s.amount,
+                   s.circ_mv, s.turnover_rate, z.seal_amount, z.board_days, z.industry,
+                   'zt_pool+stock_daily'
+            FROM zt_pool z
+            JOIN stock_daily s ON s.code = z.code AND s.date = %s
+            WHERE z.date = %s
+            ON CONFLICT (date, code) DO UPDATE SET
+                name=EXCLUDED.name, close=EXCLUDED.close, pct=EXCLUDED.pct,
+                amount=EXCLUDED.amount, circ_mv=EXCLUDED.circ_mv,
+                turnover_rate=EXCLUDED.turnover_rate,
+                prev_seal_amount=EXCLUDED.prev_seal_amount,
+                prev_board_days=EXCLUDED.prev_board_days,
+                source=EXCLUDED.source, ingest_ts=now()
+        """, (trade_date, trade_date, prev))
+        n = cur.rowcount
+    conn.commit()
+    return n

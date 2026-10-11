@@ -8,12 +8,12 @@ jobs:
     domain: D0
     target_tables: [trade_cal, session_def]
     schedule_cron: "0 0 1 1 *"  # 每年1/1全量 + 每月1日核对
-    source_chain: ["akshare"]
+    source_chain: ["sina"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 300
     critical: true
     enabled: true
-    note: "交易日历；每年1/1全量+每月1日核对"
+    note: "交易日历。缺日用新浪交易日列表补，已有行不改。2026-10-11 补到 2026-12-31"
 
   - job_name: j_instrument_master
     domain: auxiliary
@@ -41,23 +41,23 @@ jobs:
     domain: D7
     target_tables: [global_daily]
     schedule_cron: "0 16 * * 1-5"
-    source_chain: ["eastmoney", "tencent", "sina"]
+    source_chain: ["tencent"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: true
     enabled: true
-    note: "亚洲收盘（港/韩/日）16:00"
+    note: "亚洲收盘 16:00。现只写恒生、国企指数；日经和韩国指数本机没有可用源"
 
   - job_name: j_global_minute_pre
     domain: D7
     target_tables: [global_minute]
     schedule_cron: "*/15 6-9 * * 1-5"
-    source_chain: ["sina", "tencent"]
+    source_chain: ["tencent"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 120
     critical: false
-    enabled: false
-    note: "盘前15min（ES/NQ期货等）06:00-09:30；盘中作业，开市后启用"
+    enabled: true
+    note: "盘前15min。腾讯 hf_ES。纳指期货代码无报价。2026-10-11 梁总要求未完成项收口后启用"
 
   - job_name: j_index_daily
     domain: D1
@@ -74,12 +74,12 @@ jobs:
     domain: D1
     target_tables: [index_minute]
     schedule_cron: "0 16 * * 1-5"
-    source_chain: ["mootdx", "tencent"]
+    source_chain: ["tencent"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: false
     enabled: true
-    note: "六大指数1m K线 16:00"
+    note: "六大指数1m。腾讯 ifzq，只落目标交易日"
 
   - job_name: j_stock_daily
     domain: D2
@@ -96,12 +96,12 @@ jobs:
     domain: D2
     target_tables: [etf_daily]
     schedule_cron: "35 15 * * 1-5"
-    source_chain: ["akshare", "tencent"]
+    source_chain: ["sina", "tencent"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: false
     enabled: true
-    note: "ETF日K 15:35"
+    note: "ETF日K。新浪拿代码，腾讯报价，时间戳必须等于交易日"
 
   - job_name: j_zt_pools
     domain: D3
@@ -140,12 +140,12 @@ jobs:
     domain: D2
     target_tables: [stock_minute]
     schedule_cron: "45 15 * * 1-5"
-    source_chain: ["mootdx", "tencent"]
+    source_chain: ["tencent"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: false
     enabled: true
-    note: "观察池1m K线 15:45"
+    note: "观察池1m。只采 watchlist.active，池子空则 SKIP"
 
   - job_name: j_verify_daily
     domain: pipeline
@@ -156,7 +156,7 @@ jobs:
     timeout_s: 900
     critical: false
     enabled: true
-    note: "双源复核 17:00"
+    note: "双源复核 17:00。上证收盘对腾讯现价，差超过 1 点记 FAIL"
 
   - job_name: j_backfill_daily
     domain: pipeline
@@ -167,7 +167,7 @@ jobs:
     timeout_s: 1800
     critical: false
     enabled: true
-    note: "次日补采 07:00（扫昨日MISS/quarantine pending）"
+    note: "次日补采 07:00。上一交易日关键表为空才重跑，有行的跳过"
 
   - job_name: j_coverage_check
     domain: pipeline
@@ -178,7 +178,7 @@ jobs:
     timeout_s: 300
     critical: true
     enabled: true
-    note: "覆盖率检查 07:15（缺失率>0.1%告警）"
+    note: "覆盖率检查 07:15。指数、个股、涨停、板块、资金流向上一交易日为 0 则 FAIL"
 
   - job_name: j_heartbeat
     domain: pipeline
@@ -200,7 +200,7 @@ jobs:
     timeout_s: 120
     critical: false
     enabled: true
-    note: "采集日报 16:45（飞书webhook）"
+    note: "采集日报 16:45。汇总当天 ingest_log，尚未接飞书 webhook"
 
   # ─── Z8 W2b: lovetrade 迁移作业 ────────────────────────────────────
 
@@ -270,6 +270,50 @@ jobs:
     enabled: false
     note: "停用 2026-10-11。lovetrade 已下线，预测改由观势 POST /d12/prediction 直写。保留注册行留痕，禁止再向 prediction 覆写"
 
+  - job_name: j_dragon_tiger
+    domain: D4
+    target_tables: [dragon_tiger]
+    schedule_cron: "10 16 * * 1-5"
+    source_chain: ["eastmoney"]
+    retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
+    timeout_s: 300
+    critical: false
+    enabled: true
+    note: "龙虎榜 16:10。东财上榜原因、买卖额，以及买卖前五席位"
+
+  - job_name: j_northbound
+    domain: D4
+    target_tables: [northbound_daily]
+    schedule_cron: "20 17 * * 1-5"
+    source_chain: ["eastmoney"]
+    retry_policy: {"tries": 2, "backoff_s": [10, 60]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "北向日频。成交额未公布则记 MISS，不把南向数字写进来。公开序列停在 2024-08-16"
+
+  - job_name: j_fundamentals
+    domain: D9
+    target_tables: [lockup_calendar, share_structure, financial_reports, finance_snapshot, earnings_calendar]
+    schedule_cron: "30 19 * * 1-5"
+    source_chain: ["eastmoney"]
+    retry_policy: {"tries": 2, "backoff_s": [10, 60]}
+    timeout_s: 600
+    critical: false
+    enabled: true
+    note: "解禁、近期股本、财报更新、披露预约。f10 正文、一致预期、研报 PDF 没有迁移里的表"
+
+  - job_name: j_hot_list
+    domain: D6
+    target_tables: [theme_heat]
+    schedule_cron: "20 15 * * 1-5"
+    source_chain: ["ths"]
+    retry_policy: {"tries": 2, "backoff_s": [10, 60]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "同花顺热股榜和概念热榜 15:20。休市 SKIP。东财机会榜本机 rc=102，98dou 没有可用列表，不轮询"
+
   - job_name: j_base_rate
     domain: D12
     target_tables: [base_rate]
@@ -280,3 +324,25 @@ jobs:
     critical: false
     enabled: true
     note: "基率聚合 每周五18:00（口径spec v1.0 观势2026-10-07冻结）"
+
+  - job_name: j_option_daily
+    domain: D11
+    target_tables: []
+    schedule_cron: "40 15 * * 1-5"
+    source_chain: ["sina"]
+    retry_policy: {"tries": 1, "backoff_s": [10]}
+    timeout_s: 60
+    critical: false
+    enabled: true
+    note: "期权。新浪合约行情和东财报表都没有合约，记 MISS，不编造"
+
+  - job_name: j_longhu_probe
+    domain: D3
+    target_tables: []
+    schedule_cron: "30 16 * * 1-5"
+    source_chain: ["longhu"]
+    retry_policy: {"tries": 1, "backoff_s": [10]}
+    timeout_s: 120
+    critical: false
+    enabled: true
+    note: "交易日回报情绪、涨停回封、雷达行数。空响应不写行情表。游资和 L2 盘口不调用"
