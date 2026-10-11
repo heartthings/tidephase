@@ -83,7 +83,7 @@ jobs:
     timeout_s: 120
     critical: true
     enabled: false
-    note: "盘中新闻流 5min间隔；盘中作业，开市后启用"
+    note: "维持停用。D10 由 j_market_messages_hot/other 直采东财/新浪承接，避免双作业重复采集"
 
   # D11 龙虎榜/大宗交易（j_bidding_list 已存在）
   - job_name: j_block_trade
