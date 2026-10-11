@@ -1,6 +1,6 @@
 # 观势数据层 (market-datalayer)
 
-> 自建时序库（TimescaleDB）+ 12 域 54 表采集管道 + data-api 19 端点
+> 自建时序库（TimescaleDB）+ 采集管道 + data-api + 观势台页面
 
 ## 架构
 
@@ -9,26 +9,36 @@
     ↓
 dsched 调度服务（APScheduler + job_registry）
     ↓
-dworker 采集工作器（源适配器 + 降级链 + 限速 + 校验 + quarantine）
+dworker 采集工作器（源适配器 + 降级链 + 校验 + quarantine）
     ↓
 TimescaleDB (PG16) · market_tsdb
     ↓
-data-api (FastAPI :8787) → 观势 skill
+data-api (FastAPI，容器内 8787，宿主仅 127.0.0.1:8787)
+    ↓
+观势台 market-console（127.0.0.1:7511）
+    · 静态页面
+    · /api、/auth 同源转到 market-api
+    · frp [console]：本机 7511 → 公网 8005（原来系统 nginx 的映射）
+    ↓
+浏览器 / 观势 skill
 ```
+
+页面容器自带 nginx，只服务观势台。宿主机不再跑系统 nginx；每个应用自己占一个本机端口，再在 frp 里单独转发。
 
 ## 目录结构
 
 ```
 market-datalayer/
+├── console/                  # 观势台（guanshi-console）
 ├── db/migrations/            # DDL 迁移（V001__init...）
 ├── dworker/                  # 采集框架
 │   ├── adapters/             # 源适配器（tencent/eastmoney/mootdx/akshare/sina）
 │   ├── core/                 # 降级链/限速/重试/校验/quarantine
 │   └── validate/             # 校验引擎
 ├── dsched/                   # 调度服务
-├── data_api/                 # FastAPI（Z2 实装）
+├── data_api/                 # FastAPI
 ├── tools/                    # 迁移/回填/冒烟工具
-├── ops/                      # docker-compose / WAL-G / 告警
+├── ops/                      # docker-compose
 ├── configs/                  # rate_limits / validation_rules / secrets（不入 git）
 ├── tests/                    # 单元测试
 ├── data/raw/                 # raw 归档（不入 git）

@@ -18,6 +18,7 @@ Z7-ext · 催化雷达读写端点
 """
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -307,6 +308,10 @@ async def create_system_state(request: Request):
     for field in ("date", "overall_phase"):
         if body.get(field) is None:
             return _error("BAD_PARAM", f"'{field}' is required", 400)
+
+    scan_time = body.get("scan_time")
+    if scan_time is not None and not re.fullmatch(r"\d{2}:\d{2}(:\d{2})?", str(scan_time)):
+        return _error("BAD_PARAM", "scan_time must be HH:MM or HH:MM:SS", 400)
 
     conn = _get_d12writer_conn()
     try:

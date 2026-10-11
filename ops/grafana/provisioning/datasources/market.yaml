@@ -1,0 +1,21 @@
+apiVersion: 1
+
+datasources:
+  - name: market_tsdb
+    uid: market_tsdb
+    type: postgres
+    access: proxy
+    url: market-tsdb:5432
+    user: duser_reader
+    isDefault: true
+    editable: false
+    jsonData:
+      database: market_tsdb
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: true
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: $__env{MARKET_READER_PASSWORD}

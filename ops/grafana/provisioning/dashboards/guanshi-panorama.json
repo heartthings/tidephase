@@ -1,0 +1,1831 @@
+{
+  "uid": "guanshi-panorama",
+  "title": "观势决策看板",
+  "description": "按市场、资金、板块、个股、消息、预测往下看。红涨绿跌。",
+  "tags": [
+    "market",
+    "guanshi"
+  ],
+  "timezone": "Asia/Shanghai",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": {
+    "from": "now-500d",
+    "to": "now"
+  },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "一、先看市场：指数平不平，赚钱效应在不在",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "按这个顺序看：**市场 → 外盘 → 盘中路径 → 板块资金 → 个股 → 消息 → 自己的预测**。红涨绿跌。\n\n指数几乎不动、但打板成功率和大涨家数很高，就是结构市。板块资金停在 9 月 30 日，个股行情到 10 月 9 日，不要当成同一天。空表在最底下覆盖表里行数为 0。"
+      }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "最近交易日",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT max(date)::text AS \"日期\" FROM stock_daily",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "上证收盘",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT close FROM index_daily WHERE code='sh000001' ORDER BY date DESC LIMIT 1",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "上证涨跌%",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT pct FROM index_daily WHERE code='sh000001' ORDER BY date DESC LIMIT 1",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "text",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1e-07
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "创业板涨跌%",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT pct FROM index_daily WHERE code='sz399006' ORDER BY date DESC LIMIT 1",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "text",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1e-07
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "上涨家数",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT count(*)::int AS v FROM stock_daily WHERE date=(SELECT max(date) FROM stock_daily) AND pct>0",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "下跌家数",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT count(*)::int AS v FROM stock_daily WHERE date=(SELECT max(date) FROM stock_daily) AND pct<0",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "打板成功率%",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT dbcgl FROM sentiment_daily ORDER BY date DESC LIMIT 1",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "打板溢价%",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT dbyll FROM sentiment_daily ORDER BY date DESC LIMIT 1",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "text",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1e-07
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "这一天合在一起看",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nWITH d AS (SELECT max(date) AS d FROM stock_daily)\nSELECT d.d::text AS \"交易日\",\n  (SELECT round(pct::numeric, 2) FROM index_daily WHERE code='sh000001' AND date=d.d) AS \"上证%\",\n  (SELECT round(pct::numeric, 2) FROM index_daily WHERE code='sh000300' AND date=d.d) AS \"沪深300%\",\n  (SELECT round(pct::numeric, 2) FROM index_daily WHERE code='sz399006' AND date=d.d) AS \"创业板%\",\n  (SELECT count(*) FROM stock_daily WHERE date=d.d AND pct>0) AS \"上涨\",\n  (SELECT count(*) FROM stock_daily WHERE date=d.d AND pct<0) AS \"下跌\",\n  (SELECT count(*) FROM stock_daily WHERE date=d.d AND pct>=9.5) AS \"涨幅≥9.5%\",\n  (SELECT count(*) FROM stock_daily WHERE date=d.d AND pct<=-9.5) AS \"跌幅≤-9.5%\",\n  (SELECT round(dbcgl::numeric, 2) FROM sentiment_daily WHERE date=d.d) AS \"打板成功率%\",\n  (SELECT round(dbyll::numeric, 2) FROM sentiment_daily WHERE date=d.d) AS \"打板溢价%\",\n  (SELECT count(*) FROM market_messages WHERE msg_ts::date = d.d) AS \"当日快讯\",\n  (SELECT round((100.0 * sum(amount) FILTER (WHERE rn <= 50) / NULLIF(max(tot),0))::numeric, 1)\n     FROM (\n       SELECT amount,\n              row_number() OVER (ORDER BY amount DESC) rn,\n              sum(amount) OVER () tot\n       FROM stock_daily\n       WHERE date = d.d AND amount > 0\n     ) z) AS \"前50成交额占比%\"\nFROM d\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "指数涨跌幅：谁在带方向",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "\nSELECT date AS \"time\", \nCASE code\n  WHEN 'sh000001' THEN '上证' WHEN 'sz399001' THEN '深成'\n  WHEN 'sz399006' THEN '创业板' WHEN 'sh000300' THEN '沪深300'\n  WHEN 'sh000016' THEN '上证50' WHEN 'sh000688' THEN '科创50'\n  ELSE code END\n AS metric, pct AS value\nFROM index_daily\nWHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date\nORDER BY 1\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "spanNulls": true,
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "decimals": 2,
+          "unit": "suffix:%"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "barchart",
+      "title": "最近交易日：股票涨跌分布",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT CASE\n         WHEN pct >= 9.5 THEN '涨停附近 ≥9.5%'\n         WHEN pct >= 3 THEN '强势 3~9.5%'\n         WHEN pct > 0 THEN '上涨 0~3%'\n         WHEN pct = 0 THEN '平盘'\n         WHEN pct > -3 THEN '下跌 0~-3%'\n         WHEN pct > -9.5 THEN '弱势 -3~-9.5%'\n         ELSE '跌停附近 ≤-9.5%'\n       END AS \"区间\",\n       count(*)::int AS \"家数\"\nFROM stock_daily\nWHERE date = (SELECT max(date) FROM stock_daily)\nGROUP BY 1\nORDER BY min(pct) DESC\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "情绪：打板成功率与溢价",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "\nSELECT date AS \"time\", '打板成功率' AS metric, dbcgl AS value\nFROM sentiment_daily\nWHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date AND dbcgl IS NOT NULL\nUNION ALL\nSELECT date, '打板溢价', dbyll\nFROM sentiment_daily\nWHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date AND dbyll IS NOT NULL\nORDER BY 1\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "spanNulls": true,
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "decimals": 2,
+          "unit": "suffix:%"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "隔夜外盘涨跌幅（美股、港股、商品）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "\nSELECT date AS \"time\", \nCASE code\n  WHEN 'SPX' THEN '标普' WHEN 'IXIC' THEN '纳指' WHEN 'DJI' THEN '道指'\n  WHEN 'HSI' THEN '恒生' WHEN 'GC' THEN '黄金' WHEN 'CL' THEN '原油'\n  WHEN 'SI' THEN '白银' ELSE code END\n AS metric, pct AS value\nFROM global_daily\nWHERE session = 'close'\n  AND code IN ('SPX','IXIC','DJI','HSI','GC','CL','SI')\n  AND date >= $__timeFrom()::date AND date <= $__timeTo()::date\nORDER BY 1\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "spanNulls": true,
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "decimals": 2,
+          "unit": "suffix:%"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "二、盘中路径：分钟线看的是日内怎么走，不是收盘一个点",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "指数分钟收盘 · 库内最近一个交易日（查询自动跟到最新分钟，目前数据停在 2026-07-10）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "\nSELECT ts AS \"time\", \nCASE code\n  WHEN 'sh000001' THEN '上证' WHEN 'sz399001' THEN '深成'\n  WHEN 'sz399006' THEN '创业板' WHEN 'sh000300' THEN '沪深300'\n  WHEN 'sh000016' THEN '上证50' WHEN 'sh000688' THEN '科创50'\n  ELSE code END\n AS metric, close AS value\nFROM index_minute\nWHERE freq = '1m'\n  AND ts >= (SELECT max(ts)::date FROM index_minute)\n  AND ts < (SELECT max(ts)::date FROM index_minute) + INTERVAL '1 day'\nORDER BY 1\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "spanNulls": true,
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "decimals": 2,
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "text",
+      "title": "分钟数据现在能看到什么",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**能看：** 上证、深成、创业板的 1 分钟线，最近一根在 **2026-07-10**。上图永远画库里最后一个有分钟数据的交易日，所以不会因为看板时间范围而空白。\n\n**还不能当实时盘：** `stock_minute`（观察池个股）、`global_minute`（外盘分钟）、`plate_movement_intraday`（板块异动）行数都是 0。有数之后，同样的「取最大时间那天」写法会自动接上。"
+      }
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "三、资金和板块：钱在往哪边集中",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      }
+    },
+    {
+      "id": 20,
+      "type": "barchart",
+      "title": "概念板块涨幅前 12（最新交易日，目前 2026-09-30）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT sector_name AS \"板块\", round(pct::numeric, 2) AS \"涨跌幅%\"\nFROM sector_daily\nWHERE date = (SELECT max(date) FROM sector_daily)\nORDER BY pct DESC NULLS LAST\nLIMIT 12\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 21,
+      "type": "barchart",
+      "title": "概念板块主力净流入前 12（亿元，同一天）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT sector_name AS \"板块\", round((main_net_inflow/1e8)::numeric, 2) AS \"净流入亿元\"\nFROM sector_daily\nWHERE date = (SELECT max(date) FROM sector_daily)\nORDER BY main_net_inflow DESC NULLS LAST\nLIMIT 12\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 22,
+      "type": "barchart",
+      "title": "概念板块跌幅前 12",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT sector_name AS \"板块\", round(pct::numeric, 2) AS \"涨跌幅%\"\nFROM sector_daily\nWHERE date = (SELECT max(date) FROM sector_daily)\nORDER BY pct ASC NULLS LAST\nLIMIT 12\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "资金各层有没有数（0 就是这层还没采进来）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT * FROM (\n  SELECT '概念板块资金' AS \"层\", count(*)::int AS \"行数\", max(date)::text AS \"最新\" FROM sector_daily\n  UNION ALL SELECT '个股资金流', count(*)::int, max(date)::text FROM fund_flow_stock\n  UNION ALL SELECT '板块资金流表', count(*)::int, max(date)::text FROM fund_flow_sector\n  UNION ALL SELECT '北向', count(*)::int, max(date)::text FROM northbound_daily\n  UNION ALL SELECT '两融全市场', count(*)::int, max(date)::text FROM margin_daily\n  UNION ALL SELECT '两融个股', count(*)::int, max(date)::text FROM margin_stock\n  UNION ALL SELECT '大宗', count(*)::int, max(date)::text FROM block_trade\n  UNION ALL SELECT '估值', count(*)::int, max(date)::text FROM valuation_daily\n  UNION ALL SELECT '题材热度', count(*)::int, max(date)::text FROM theme_heat\n) s ORDER BY \"行数\" DESC\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "四、落到个股：谁在涨，以及某个题材里面有什么",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      }
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "最近交易日领涨",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT code AS \"代码\", name AS \"名称\", round(pct::numeric,2) AS \"涨跌幅%\",\n       round(close::numeric,2) AS \"收盘\", round(amount::numeric,0) AS \"成交额\",\n       round(turnover_rate::numeric,2) AS \"换手%\"\nFROM stock_daily\nWHERE date = (SELECT max(date) FROM stock_daily)\nORDER BY pct DESC NULLS LAST\nLIMIT 20\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "最近交易日领跌",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT code AS \"代码\", name AS \"名称\", round(pct::numeric,2) AS \"涨跌幅%\",\n       round(close::numeric,2) AS \"收盘\", round(amount::numeric,0) AS \"成交额\",\n       round(turnover_rate::numeric,2) AS \"换手%\"\nFROM stock_daily\nWHERE date = (SELECT max(date) FROM stock_daily)\nORDER BY pct ASC NULLS LAST\nLIMIT 20\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 27,
+      "type": "table",
+      "title": "所选题材里的个股（右上角选题材，按最近交易日涨跌幅）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 66
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT \"代码\",\"名称\",\"涨跌幅%\",\"收盘\",\"成交额\" FROM (\n  SELECT DISTINCT ON (s.code)\n    s.code AS \"代码\", s.name AS \"名称\",\n    round(s.pct::numeric, 2) AS \"涨跌幅%\",\n    round(s.close::numeric, 2) AS \"收盘\",\n    round(s.amount::numeric, 0) AS \"成交额\"\n  FROM stock_daily s\n  JOIN stock_sector_map m ON m.code = s.code\n  WHERE s.date = (SELECT max(date) FROM stock_daily)\n    AND m.sector_name = '$theme'\n    AND (m.effective_to IS NULL OR m.effective_to >= s.date)\n  ORDER BY s.code\n) x\nORDER BY \"涨跌幅%\" DESC NULLS LAST\nLIMIT 40\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "table",
+      "title": "竞价强弱（只要正式竞价快照，去掉新股异常值）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 66
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT code AS \"代码\", name AS \"名称\", round(jjzf::numeric, 2) AS \"竞价涨幅%\",\n       ssbk AS \"板块\", ztyy AS \"原因\"\nFROM bidding_list\nWHERE date = (SELECT max(date) FROM bidding_list)\n  AND quotations_type = 9\nORDER BY jjzf DESC NULLS LAST\nLIMIT 20\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "五、消息和催化：市场在说什么，系统怎么记的",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 75
+      }
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "快讯（接近实时，始终取最新 40 条）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 76
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT to_char(msg_ts, 'MM-DD HH24:MI') AS \"时间\",\n       left(title, 80) AS \"标题\",\n       source AS \"来源\"\nFROM market_messages\nORDER BY msg_ts DESC\nLIMIT 40\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "barchart",
+      "title": "雷达事件：最近一个有数据的交易日（目前 2026-09-30）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 76
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT event_type AS \"事件\", count(*)::int AS \"次数\"\nFROM radar_event\nWHERE ts::date = (SELECT max(ts)::date FROM radar_event)\nGROUP BY 1\nORDER BY 2 DESC\nLIMIT 12\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 32,
+      "type": "table",
+      "title": "电报最近 15 条",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 86
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT to_char(pub_ts, 'MM-DD HH24:MI') AS \"时间\",\n       left(title, 80) AS \"标题\", media AS \"媒体\"\nFROM news_telegraph\nORDER BY pub_ts DESC\nLIMIT 15\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "table",
+      "title": "催化冲击最近 15 条",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 86
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT date::text AS \"日期\", impact_level AS \"级别\", lifecycle_stage AS \"阶段\",\n       verified_result AS \"验证\", left(message_summary, 70) AS \"消息\"\nFROM catalyst_impact\nORDER BY message_time DESC NULLS LAST\nLIMIT 15\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 34,
+      "type": "row",
+      "title": "六、对照自己的判断：预测、反思、认知",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 94
+      }
+    },
+    {
+      "id": 35,
+      "type": "barchart",
+      "title": "预测结果分布",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 95
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT result AS \"结果\", count(*)::int AS \"条数\"\nFROM prediction\nGROUP BY 1\nORDER BY 2 DESC\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 36,
+      "type": "table",
+      "title": "最近预测",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 95
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT prediction_id AS \"编号\", to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') AS \"创建\", category AS \"类别\",\n       confidence_pct AS \"置信\", horizon AS \"窗口\", result AS \"结果\",\n       left(statement, 72) AS \"判断\"\nFROM prediction\nORDER BY created_at DESC\nLIMIT 15\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 37,
+      "type": "table",
+      "title": "反思记录",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 103
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT decision_id AS \"决策\", quadrant AS \"四象限\", error_stage AS \"归因\",\n       action_status AS \"行动\", left(lesson_text, 60) AS \"教训\"\nFROM reflection\nORDER BY created_at DESC\nLIMIT 20\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 38,
+      "type": "barchart",
+      "title": "认知库：类型 × 状态",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 103
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT type || ' / ' || status AS \"类型\", count(*)::int AS \"条数\"\nFROM cognition\nGROUP BY 1\nORDER BY 2 DESC\nLIMIT 12\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 24,
+        "showValue": "auto",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "barWidth": 0.7,
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 39,
+      "type": "table",
+      "title": "基率（同类情形的历史命中率）",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 110
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT regime AS \"相态\", category AS \"类别\", horizon AS \"窗口\",\n       window_end AS \"截止\", n_samples AS \"样本\",\n       round(hit_rate::numeric, 3) AS \"命中率\"\nFROM base_rate\nORDER BY window_end DESC, n_samples DESC\nLIMIT 20\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "七、全库覆盖：每张表有多少行、最新到哪一天",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 116
+      }
+    },
+    {
+      "id": 41,
+      "type": "table",
+      "title": "69 张表",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 16,
+        "x": 0,
+        "y": 117
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT t.表, t.行数, t.最新, obj_description(c.oid) AS 备注 FROM (SELECT 'announcements'::text AS 表, count(*)::int AS 行数, max(ann_date)::text AS 最新 FROM announcements UNION ALL SELECT 'backfill_progress'::text AS 表, count(*)::int AS 行数, max(updated_at)::text AS 最新 FROM backfill_progress UNION ALL SELECT 'base_rate'::text AS 表, count(*)::int AS 行数, max(window_end)::text AS 最新 FROM base_rate UNION ALL SELECT 'bidding_list'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM bidding_list UNION ALL SELECT 'block_trade'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM block_trade UNION ALL SELECT 'catalyst_active_message'::text AS 表, count(*)::int AS 行数, max(created_time)::text AS 最新 FROM catalyst_active_message UNION ALL SELECT 'catalyst_impact'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM catalyst_impact UNION ALL SELECT 'catalyst_system_state'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM catalyst_system_state UNION ALL SELECT 'cognition'::text AS 表, count(*)::int AS 行数, max(created_at)::text AS 最新 FROM cognition UNION ALL SELECT 'dividend'::text AS 表, count(*)::int AS 行数, max(announce_date)::text AS 最新 FROM dividend UNION ALL SELECT 'dt_pool'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM dt_pool UNION ALL SELECT 'dynamic_category_config'::text AS 表, count(*)::int AS 行数, max(created_time)::text AS 最新 FROM dynamic_category_config UNION ALL SELECT 'earnings_calendar'::text AS 表, count(*)::int AS 行数, max(pre_date)::text AS 最新 FROM earnings_calendar UNION ALL SELECT 'etf_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM etf_daily UNION ALL SELECT 'finance_snapshot'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM finance_snapshot UNION ALL SELECT 'financial_reports'::text AS 表, count(*)::int AS 行数, max(announce_date)::text AS 最新 FROM financial_reports UNION ALL SELECT 'fund_flow_sector'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM fund_flow_sector UNION ALL SELECT 'fund_flow_stock'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM fund_flow_stock UNION ALL SELECT 'global_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM global_daily UNION ALL SELECT 'global_minute'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM global_minute UNION ALL SELECT 'holder_num'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM holder_num UNION ALL SELECT 'index_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM index_daily UNION ALL SELECT 'index_minute'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM index_minute UNION ALL SELECT 'ingest_log'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM ingest_log UNION ALL SELECT 'instrument_master'::text AS 表, count(*)::int AS 行数, max(updated_at)::text AS 最新 FROM instrument_master UNION ALL SELECT 'job_registry'::text AS 表, count(*)::int AS 行数, max(updated_at)::text AS 最新 FROM job_registry UNION ALL SELECT 'lockup_calendar'::text AS 表, count(*)::int AS 行数, max(unlock_date)::text AS 最新 FROM lockup_calendar UNION ALL SELECT 'macro_indicators'::text AS 表, count(*)::int AS 行数, max(release_date)::text AS 最新 FROM macro_indicators UNION ALL SELECT 'margin_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM margin_daily UNION ALL SELECT 'margin_stock'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM margin_stock UNION ALL SELECT 'market_messages'::text AS 表, count(*)::int AS 行数, max(msg_ts)::text AS 最新 FROM market_messages UNION ALL SELECT 'news_telegraph'::text AS 表, count(*)::int AS 行数, max(pub_ts)::text AS 最新 FROM news_telegraph UNION ALL SELECT 'northbound_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM northbound_daily UNION ALL SELECT 'note_category'::text AS 表, count(*)::int AS 行数, max(created_time)::text AS 最新 FROM note_category UNION ALL SELECT 'option_contracts'::text AS 表, count(*)::int AS 行数, max(list_date)::text AS 最新 FROM option_contracts UNION ALL SELECT 'option_greeks_iv'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM option_greeks_iv UNION ALL SELECT 'option_tquote'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM option_tquote UNION ALL SELECT 'plate_movement_intraday'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM plate_movement_intraday UNION ALL SELECT 'policy_calendar'::text AS 表, count(*)::int AS 行数, max(cal_date)::text AS 最新 FROM policy_calendar UNION ALL SELECT 'prediction'::text AS 表, count(*)::int AS 行数, max(created_at)::text AS 最新 FROM prediction UNION ALL SELECT 'quarantine'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM quarantine UNION ALL SELECT 'radar_event'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM radar_event UNION ALL SELECT 'reflection'::text AS 表, count(*)::int AS 行数, max(created_at)::text AS 最新 FROM reflection UNION ALL SELECT 'regime_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM regime_daily UNION ALL SELECT 'report'::text AS 表, count(*)::int AS 行数, max(generate_time)::text AS 最新 FROM report UNION ALL SELECT 'schema_migrations'::text AS 表, count(*)::int AS 行数, max(applied_at)::text AS 最新 FROM schema_migrations UNION ALL SELECT 'sector_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM sector_daily UNION ALL SELECT 'sentiment_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM sentiment_daily UNION ALL SELECT 'session_def'::text AS 表, count(*)::int AS 行数, max(ingest_ts)::text AS 最新 FROM session_def UNION ALL SELECT 'share_structure'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM share_structure UNION ALL SELECT 'stock_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM stock_daily UNION ALL SELECT 'stock_minute'::text AS 表, count(*)::int AS 行数, max(ts)::text AS 最新 FROM stock_minute UNION ALL SELECT 'stock_news'::text AS 表, count(*)::int AS 行数, max(pub_ts)::text AS 最新 FROM stock_news UNION ALL SELECT 'stock_sector_map'::text AS 表, count(*)::int AS 行数, max(updated_at)::text AS 最新 FROM stock_sector_map UNION ALL SELECT 'theme_heat'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM theme_heat UNION ALL SELECT 'topic'::text AS 表, count(*)::int AS 行数, max(ingest_ts)::text AS 最新 FROM topic UNION ALL SELECT 'topic_category'::text AS 表, count(*)::int AS 行数, max(ingest_ts)::text AS 最新 FROM topic_category UNION ALL SELECT 'topic_group'::text AS 表, count(*)::int AS 行数, max(ingest_ts)::text AS 最新 FROM topic_group UNION ALL SELECT 'topic_links'::text AS 表, count(*)::int AS 行数, max(ingest_ts)::text AS 最新 FROM topic_links UNION ALL SELECT 'trade_cal'::text AS 表, count(*)::int AS 行数, max(cal_date)::text AS 最新 FROM trade_cal UNION ALL SELECT 'trading_note'::text AS 表, count(*)::int AS 行数, max(created_time)::text AS 最新 FROM trading_note UNION ALL SELECT 'trading_system_node'::text AS 表, count(*)::int AS 行数, max(created_time)::text AS 最新 FROM trading_system_node UNION ALL SELECT 'valuation_daily'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM valuation_daily UNION ALL SELECT 'verify_diff'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM verify_diff UNION ALL SELECT 'verify_source'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM verify_source UNION ALL SELECT 'watchlist'::text AS 表, count(*)::int AS 行数, max(added_at)::text AS 最新 FROM watchlist UNION ALL SELECT 'yzt_pool'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM yzt_pool UNION ALL SELECT 'zb_pool'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM zb_pool UNION ALL SELECT 'zt_pool'::text AS 表, count(*)::int AS 行数, max(date)::text AS 最新 FROM zt_pool) t JOIN pg_class c ON c.relname = t.表 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public' ORDER BY t.行数 DESC, t.表",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    },
+    {
+      "id": 42,
+      "type": "table",
+      "title": "最近 24 小时采集作业",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 8,
+        "x": 16,
+        "y": 117
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "\nSELECT job AS \"作业\", status AS \"状态\", count(*)::int AS \"次数\",\n       to_char(max(ts), 'MM-DD HH24:MI') AS \"最近\"\nFROM ingest_log\nWHERE ts > now() - interval '24 hours'\nGROUP BY 1, 2\nORDER BY max(ts) DESC\nLIMIT 40\n",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "theme",
+        "label": "题材",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "market_tsdb"
+        },
+        "definition": "SELECT sector_name FROM stock_sector_map WHERE sector_name <> '其他' GROUP BY 1 HAVING count(*) >= 40 ORDER BY count(*) DESC",
+        "query": "SELECT sector_name FROM stock_sector_map WHERE sector_name <> '其他' GROUP BY 1 HAVING count(*) >= 40 ORDER BY count(*) DESC",
+        "refresh": 1,
+        "regex": "",
+        "sort": 0,
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "skipUrlSync": false,
+        "current": {
+          "selected": true,
+          "text": "数据中心",
+          "value": "数据中心"
+        },
+        "options": []
+      }
+    ]
+  }
+}

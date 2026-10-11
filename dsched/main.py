@@ -144,6 +144,25 @@ def write_heartbeat(conn):
         logger.warning(f"Heartbeat log failed: {e}")
 
 
+def _cron_dow_to_apscheduler(field: str) -> str:
+    """标准 cron 周几（0 或 7=周日，1=周一）转成 APScheduler 的周名。"""
+    if not field or field == "*" or any(c.isalpha() for c in field):
+        return field
+    names = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+
+    def one(token: str) -> str:
+        step = ""
+        if "/" in token:
+            token, step_n = token.split("/", 1)
+            step = "/" + step_n
+        if "-" in token:
+            a, b = token.split("-", 1)
+            return f"{names[int(a) % 7]}-{names[int(b) % 7]}{step}"
+        return f"{names[int(token) % 7]}{step}"
+
+    return ",".join(one(part) for part in field.split(",") if part)
+
+
 def parse_cron_expression(cron_expr: str) -> dict:
     """
     Parse cron expression (5-field) into APScheduler CronTrigger kwargs.
@@ -158,6 +177,9 @@ def parse_cron_expression(cron_expr: str) -> dict:
         return None
 
     minute, hour, day, month, day_of_week = parts
+    # APScheduler day_of_week 是 0=周一。标准 cron 是 0=周日。
+    # 直接把 "1-5" 塞进去会变成周二到周六：周一不开火、周六误开火。
+    day_of_week = _cron_dow_to_apscheduler(day_of_week)
 
     kwargs = {}
     if minute != "*":

@@ -1,0 +1,107 @@
+.wrap {
+  max-width: 100%;
+  text-align: center;
+  width: 100%;
+
+  :global(.markdown-body) {
+    color: var(--color-text);
+    font-size: 11px;
+    line-height: 1.45;
+    opacity: 0.82;
+    word-break: break-word;
+  }
+
+  :global(.markdown-body p) {
+    margin: 2px 0;
+  }
+
+  :global(.markdown-body h1),
+  :global(.markdown-body h2),
+  :global(.markdown-body h3),
+  :global(.markdown-body h4),
+  :global(.markdown-body h5),
+  :global(.markdown-body h6) {
+    font-size: 12px;
+    font-weight: 600;
+    margin: 4px 0 2px;
+  }
+
+  :global(.markdown-body ul),
+  :global(.markdown-body ol) {
+    margin: 2px 0 2px 14px;
+    padding: 0;
+    text-align: left;
+  }
+
+  :global(.markdown-body pre) {
+    font-size: 10px;
+    margin: 4px 0;
+    padding: 6px 8px;
+  }
+
+  :global(.markdown-body code) {
+    font-size: 10px;
+  }
+
+  :global(.markdown-body blockquote) {
+    margin: 4px 0;
+    padding: 4px 8px;
+  }
+
+  :global(.markdown-body img) {
+    margin: 4px auto;
+    max-height: 48px;
+  }
+}
+
+.compact :global(.markdown-body) {
+  font-size: 10px;
+}
+
+.clamped {
+  max-height: 44px;
+  overflow: hidden;
+}
+
+.hoverable {
+  cursor: default;
+}
+
+.tooltipOverlay {
+  max-width: 420px;
+
+  :global(.ant-tooltip-inner) {
+    background-color: var(--color-bg-container, #ffffff) !important;
+    border: 1px solid var(--color-border, #e5e7eb) !important;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14) !important;
+    color: var(--color-text, #1f2328) !important;
+    padding: 10px 12px !important;
+  }
+
+  :global(.ant-tooltip-arrow::before) {
+    background: var(--color-bg-container, #ffffff) !important;
+  }
+}
+
+.tooltipPanel {
+  background-color: var(--color-bg-container, #ffffff);
+  max-width: 380px;
+}
+
+.tooltipMarkdown {
+  :global(.markdown-body) {
+    color: var(--color-text, #1f2328);
+    font-size: 12px;
+    line-height: 1.55;
+    max-width: 380px;
+    text-align: left;
+  }
+
+  :global(.markdown-body p) {
+    margin: 6px 0;
+  }
+
+  :global(.markdown-body img) {
+    max-height: none;
+  }
+}

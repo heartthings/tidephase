@@ -1,7 +1,7 @@
-# 观势数据层 docker-compose · Z1 波
-# 四服务：market-tsdb / market-sched / market-worker / market-api
+# 观势数据层 docker-compose
+# 五服务：market-tsdb / market-sched / market-worker / market-api / market-console
 # 所有端口仅绑 127.0.0.1 或 compose 内网，永不 0.0.0.0
-# 不动生产容器（lovetrade-service/love_mysql_prod/mysql_green/aitoearn-*/1Panel-*）
+# 不动 Dify / 1Panel / mysql_green / redis_green / minio_green
 
 services:
   # ─── TimescaleDB (PG16) ───────────────────────────────────────────
@@ -136,6 +136,25 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - market-net
+
+  # ─── 观势台（静态页 + 同源反代）────────────────────────────────
+  # 跟 Dify 一样：容器自己占一个本机端口，FRP 单独转发。
+  # 本机 127.0.0.1:7511，占用原来系统 nginx 的公网映射 8005。
+  # 容器内仍听 80，/api 与 /auth 转到 market-api:8787。
+  market-console:
+    build:
+      context: ../console
+      dockerfile: Dockerfile
+    image: market-console:local
+    container_name: market-console
+    restart: always
+    ports:
+      - "127.0.0.1:7511:80"
+    depends_on:
+      market-api:
+        condition: service_healthy
     networks:
       - market-net
 

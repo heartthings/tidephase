@@ -850,6 +850,66 @@ async def create_prediction(
     return envelope({"created": pid})
 
 
+REGIME_VALUES = {
+    "stable", "oscillation", "critical", "transition",
+    "trending_up", "trending_down", "news_shock",
+}
+
+
+@app.post("/d12/regime_daily")
+async def upsert_regime_daily(
+    request: Request,
+    _=Depends(require_write),
+):
+    """当日相态快照。按 date 幂等 upsert。观势收盘分析 17:30 写入。"""
+    body = await request.json()
+    trade_date = body.get("date")
+    regime = body.get("regime")
+    if not trade_date:
+        return error_response("BAD_PARAM", "'date' is required", 400)
+    if regime not in REGIME_VALUES:
+        return error_response(
+            "BAD_PARAM",
+            "regime must be one of " + ",".join(sorted(REGIME_VALUES)),
+            400,
+        )
+
+    indicators = body.get("indicators")
+    quadrant = body.get("quadrant")
+    evidence = body.get("evidence")
+    conn = get_d12writer_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO regime_daily (
+                    date, regime, sub_regime, quadrant, evidence,
+                    actor, source, note, indicators
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (date) DO UPDATE SET
+                    regime = EXCLUDED.regime,
+                    sub_regime = EXCLUDED.sub_regime,
+                    quadrant = EXCLUDED.quadrant,
+                    evidence = EXCLUDED.evidence,
+                    actor = EXCLUDED.actor,
+                    source = EXCLUDED.source,
+                    note = EXCLUDED.note,
+                    indicators = EXCLUDED.indicators,
+                    ingest_ts = now()
+            """, (
+                trade_date, regime, body.get("sub_regime"),
+                json.dumps(quadrant, ensure_ascii=False) if quadrant is not None else None,
+                json.dumps(evidence, ensure_ascii=False) if evidence is not None else None,
+                body.get("actor", "guanshi"),
+                body.get("source", "guanshi"),
+                body.get("note"),
+                json.dumps(indicators, ensure_ascii=False) if indicators is not None else None,
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+    return envelope({"upserted": trade_date, "regime": regime})
+
+
 @app.put("/d12/prediction/{prediction_id}/result")
 async def update_prediction_result(
     prediction_id: str,

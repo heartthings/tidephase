@@ -1,0 +1,157 @@
+.page {
+  align-items: center;
+  background: url('/background.png') center center / cover no-repeat;
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* 极轻遮罩，保证表单可读又不挡住画面 */
+.pageOverlay {
+  background: linear-gradient(180deg, rgba(8, 18, 48, 0.06) 0%, rgba(8, 18, 48, 0.04) 45%, rgba(8, 18, 48, 0.1) 100%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.card {
+  background: rgba(10, 22, 55, 0.26) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  position: relative;
+  z-index: 4;
+
+  :global(.ant-card-body) {
+    background: transparent !important;
+    padding: 28px 32px 32px;
+  }
+}
+
+.cardInner {
+  width: 400px;
+
+  @media (max-width: 640px) {
+    width: 300px;
+  }
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+
+  :global(button),
+  :global(.anticon) {
+    color: rgba(245, 230, 184, 0.9) !important;
+  }
+}
+
+.logo {
+  color: #f5e6b8 !important;
+  height: 64px;
+  width: 64px;
+
+  @media (max-width: 640px) {
+    height: 48px;
+    width: 48px;
+  }
+}
+
+.title {
+  color: #f5e6b8 !important;
+  font-size: 28px;
+  font-weight: 500;
+
+  @media (max-width: 640px) {
+    font-size: 22px;
+  }
+}
+
+.formArea {
+  padding-top: 24px;
+
+  :global(h3) {
+    color: #f5e6b8 !important;
+    font-weight: 600;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+  }
+
+  :global(.ant-input),
+  :global(.ant-input-affix-wrapper),
+  :global(.ant-input-password) {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.24) !important;
+    border-radius: 10px !important;
+    color: #fff !important;
+  }
+
+  :global(.ant-input-affix-wrapper .ant-input) {
+    background: transparent !important;
+  }
+
+  :global(.ant-input::placeholder) {
+    color: rgba(255, 255, 255, 0.45) !important;
+  }
+
+  :global(.ant-input-password-icon),
+  :global(.ant-input-clear-icon) {
+    color: rgba(255, 255, 255, 0.55) !important;
+  }
+
+  :global(.ant-input-affix-wrapper:hover),
+  :global(.ant-input:hover),
+  :global(.ant-input-affix-wrapper-focused),
+  :global(.ant-input:focus) {
+    border-color: rgba(168, 212, 240, 0.75) !important;
+    box-shadow: 0 0 0 2px rgba(100, 180, 255, 0.2) !important;
+  }
+
+  :global(.ant-checkbox-label) {
+    color: rgba(255, 255, 255, 0.88) !important;
+  }
+
+  :global(.ant-checkbox-inner) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.45) !important;
+  }
+
+  :global(.ant-checkbox-checked .ant-checkbox-inner) {
+    background: #e8c547 !important;
+    border-color: #e8c547 !important;
+  }
+
+  :global(.ant-btn-primary) {
+    background: linear-gradient(135deg, #f0d060 0%, #d4a72c 100%) !important;
+    border: none !important;
+    box-shadow: 0 4px 16px rgba(212, 167, 44, 0.45) !important;
+    color: #1a2540 !important;
+    font-weight: 600;
+  }
+
+  :global(.ant-btn-primary:hover) {
+    background: linear-gradient(135deg, #ffe082 0%, #e8c547 100%) !important;
+    color: #1a2540 !important;
+  }
+
+  :global(.ant-btn-link),
+  :global(.ant-btn-text) {
+    color: #b8d8ff !important;
+  }
+
+  :global(.ant-btn-link:hover),
+  :global(.ant-btn-text:hover) {
+    color: #e8f4ff !important;
+  }
+
+  :global(.ant-form-item-explain-error) {
+    color: #ffb4b4 !important;
+  }
+}

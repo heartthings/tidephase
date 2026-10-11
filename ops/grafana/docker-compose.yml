@@ -1,0 +1,33 @@
+# Grafana · 只读查看 market_tsdb
+# 宿主机仅 127.0.0.1:3000，经 frp 8010 对外。不暴露 15432 / 8787。
+
+services:
+  grafana:
+    image: grafana/grafana:11.6.1
+    container_name: market-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: http://81.70.207.80:8010
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/guanshi-panorama.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - market-net
+
+networks:
+  market-net:
+    external: true
+    name: ops_market-net
+
+volumes:
+  grafana_data:

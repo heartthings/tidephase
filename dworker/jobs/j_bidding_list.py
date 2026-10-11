@@ -24,9 +24,28 @@ RETRY_BACKOFF_S = [2, 5, 10]  # 督军整改项#3：间歇容错退避
 
 def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, trigger="scheduled"):
     """Execute j_bidding_list."""
+    from dworker.core.calendar_gate import check_trade_gate
+
     t0 = time.time()
     today = datetime.now().strftime("%Y-%m-%d")
     now = datetime.now()
+
+    gate = check_trade_gate(conn, market="SSE", check_date=today)
+    if not gate["allowed"]:
+        note = f"SKIP: {gate['reason']}"
+        logger.info(f"[j_bidding_list] {note}")
+        try:
+            ingest_logger.log_run(
+                "j_bidding_list", "D3", "bidding_list", "none", "SKIP",
+                note=note, trigger=trigger,
+            )
+        except Exception as e:
+            logger.warning(f"[j_bidding_list] ingest SKIP failed: {e}")
+        return {
+            "success": True, "source_used": "none", "already_logged": True,
+            "rows_in": 0, "rows_written": 0, "rows_quarantined": 0,
+            "note": note,
+        }
 
     # Determine quotations_type based on current time
     hour_min = now.hour * 100 + now.minute
@@ -41,10 +60,13 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
 
     all_rows = []
     source_used = None
+    tencent_codes = _load_tencent_codes(conn)
 
     for source_name in source_chain:
         try:
-            rows = _fetch_from_source_with_retry(source_name, today, quotations_type)
+            rows = _fetch_from_source_with_retry(
+                source_name, today, quotations_type, tencent_codes
+            )
             if rows:
                 all_rows = rows
                 source_used = source_name
@@ -80,12 +102,13 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     }
 
 
-def _fetch_from_source_with_retry(source_name: str, today: str, quotations_type: int) -> list:
+def _fetch_from_source_with_retry(source_name: str, today: str, quotations_type: int,
+                                   tencent_codes: list = None) -> list:
     """带重试的数据获取（整改项#3：间歇容错）"""
     last_err = None
     for attempt, backoff in enumerate(RETRY_BACKOFF_S):
         try:
-            rows = _fetch_from_source(source_name, today, quotations_type)
+            rows = _fetch_from_source(source_name, today, quotations_type, tencent_codes)
             if rows:
                 return rows
             # 空结果不算失败，但记录
@@ -99,9 +122,28 @@ def _fetch_from_source_with_retry(source_name: str, today: str, quotations_type:
     raise last_err
 
 
-def _fetch_from_source(source_name: str, today: str, quotations_type: int) -> list:
+def _load_tencent_codes(conn) -> list:
+    """用证券主档的真实代码，不再扫 600000-605999 这种空号段。"""
+    codes = []
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT code FROM instrument_master WHERE code ~ '^[0-9]{6}$'")
+            for (raw,) in cur.fetchall():
+                if raw.startswith("6"):
+                    codes.append(f"sh{raw}")
+                elif raw.startswith(("0", "3")):
+                    codes.append(f"sz{raw}")
+                elif raw.startswith(("4", "8")):
+                    codes.append(f"bj{raw}")
+    except Exception as e:
+        logger.warning(f"[j_bidding_list] instrument_master lookup failed: {e}")
+    return codes
+
+
+def _fetch_from_source(source_name: str, today: str, quotations_type: int,
+                       tencent_codes: list = None) -> list:
     if source_name == "tencent":
-        return _fetch_tencent_bidding(today, quotations_type)
+        return _fetch_tencent_bidding(today, quotations_type, tencent_codes or [])
     elif source_name == "eastmoney":
         return _fetch_eastmoney_bidding(today)
     return []
@@ -111,7 +153,7 @@ def _fetch_from_source(source_name: str, today: str, quotations_type: int) -> li
 # 主源：tencent qt（整改后新增）
 # ═══════════════════════════════════════════════════════════════════
 
-def _fetch_tencent_bidding(today: str, quotations_type: int) -> list:
+def _fetch_tencent_bidding(today: str, quotations_type: int, all_codes: list = None) -> list:
     """
     从 tencent qt API 获取全市场实时数据。
     竞价期间（09:15-09:25），返回的即为竞价数据。
@@ -145,8 +187,8 @@ def _fetch_tencent_bidding(today: str, quotations_type: int) -> list:
     # tencent qt 支持批量查询，每批最多 ~80 只
     # 策略：用东财 API 获取代码列表（如果可用），否则用已知代码范围
 
-    # 方案A：直接用 tencent 批量查询（覆盖主要代码段）
-    all_codes = _generate_all_stock_codes()
+    if not all_codes:
+        all_codes = _generate_all_stock_codes()
     batch_size = 80
 
     for i in range(0, len(all_codes), batch_size):

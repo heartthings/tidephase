@@ -6,6 +6,9 @@ configs/secrets.yaml
 # Raw data archive
 data/raw/
 
+# Frontend
+node_modules/
+
 # Python
 __pycache__/
 *.pyc

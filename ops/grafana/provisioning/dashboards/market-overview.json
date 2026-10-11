@@ -1,0 +1,73 @@
+{
+  "uid": "market-overview",
+  "title": "观势行情概览",
+  "tags": ["market", "timescale"],
+  "timezone": "Asia/Shanghai",
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-90d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "指数收盘",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "market_tsdb" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "spanNulls": true } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "market_tsdb" },
+          "format": "time_series",
+          "rawSql": "SELECT date AS \"time\", code AS metric, close AS value FROM index_daily WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "全球品种收盘",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "datasource": { "type": "postgres", "uid": "market_tsdb" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "spanNulls": true } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "market_tsdb" },
+          "format": "time_series",
+          "rawSql": "SELECT date AS \"time\", code AS metric, close AS value FROM global_daily WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "情绪 dbcgl / dbyll",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "datasource": { "type": "postgres", "uid": "market_tsdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "market_tsdb" },
+          "format": "time_series",
+          "rawSql": "SELECT date AS \"time\", 'dbcgl' AS metric, dbcgl AS value FROM sentiment_daily WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date UNION ALL SELECT date, 'dbyll', dbyll FROM sentiment_daily WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "barchart",
+      "title": "预测结果分布",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "datasource": { "type": "postgres", "uid": "market_tsdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "market_tsdb" },
+          "format": "table",
+          "rawSql": "SELECT result, count(*)::int AS n FROM prediction GROUP BY result ORDER BY n DESC"
+        }
+      ]
+    }
+  ]
+}

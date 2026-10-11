@@ -1,0 +1,201 @@
+.markdownBody {
+  color: #1f2328;
+  font-size: 14px;
+  line-height: 1.8;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.markdownBody :global(h1),
+.markdownBody :global(h2),
+.markdownBody :global(h3),
+.markdownBody :global(h4),
+.markdownBody :global(h5),
+.markdownBody :global(h6) {
+  margin: 1em 0 0.5em;
+  font-weight: 650;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.markdownBody :global(h1) {
+  font-size: 22px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.markdownBody :global(h2) {
+  font-size: 19px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.markdownBody :global(h3) {
+  font-size: 17px;
+}
+
+.markdownBody :global(h4) {
+  font-size: 15px;
+}
+
+.markdownBody :global(p) {
+  margin: 0.7em 0;
+}
+
+.markdownBody :global(a) {
+  color: #1677ff;
+  text-decoration: none;
+}
+
+.markdownBody :global(a:hover) {
+  text-decoration: underline;
+}
+
+.markdownBody :global(ul),
+.markdownBody :global(ol) {
+  margin: 0.5em 0 0.5em 1.25em;
+  padding: 0;
+}
+
+.markdownBody :global(li) {
+  margin: 0.25em 0;
+}
+
+.markdownBody :global(blockquote) {
+  margin: 0.8em 0;
+  padding: 8px 14px;
+  color: #475569;
+  background: #f8fafc;
+  border-left: 4px solid #94a3b8;
+  border-radius: 0 8px 8px 0;
+}
+
+.markdownBody :global(hr) {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.2em 0;
+}
+
+.markdownBody :global(.katex-display) {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 4px;
+}
+
+.markdownBody :global(.katex) {
+  font-size: 1.08em;
+}
+
+.inlineCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  color: #0f172a;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.codeBlock {
+  position: relative;
+  margin: 0.9em 0;
+  padding: 12px 14px;
+  overflow: auto;
+  background: #0b1220;
+  color: #e2e8f0;
+  border-radius: 10px;
+  border: 1px solid #1e293b;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.codeBlock code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  white-space: pre;
+}
+
+.codeLang {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 0.9em 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.tableWrap :global(th),
+.tableWrap :global(td) {
+  padding: 10px 12px;
+  border-top: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableWrap :global(thead th) {
+  background: #f8fafc;
+  font-weight: 650;
+  color: #334155;
+  border-top: none;
+}
+
+.tableWrap :global(tbody tr:nth-child(odd) td) {
+  background: #fcfdff;
+}
+
+.imageWrap {
+  display: block;
+  margin: 1em 0;
+  text-align: center;
+}
+
+.image {
+  max-width: 100%;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.imageCaption {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.mermaidWrap {
+  margin: 1em 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.mermaidWrap :global(svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaidError {
+  margin-top: 8px;
+  color: #f87171;
+  font-size: 12px;
+}

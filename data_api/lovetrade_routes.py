@@ -383,6 +383,271 @@ async def topic_category_stocks(category_id: str, authorization: str = None):
     return envelope(stocks)
 
 
+def _fmt_amount(v):
+    if v is None:
+        return "-"
+    n = float(v)
+    sign = "-" if n < 0 else ""
+    a = abs(n)
+    if a >= 1e8:
+        return f"{sign}{a / 1e8:.2f}亿"
+    if a >= 1e4:
+        return f"{sign}{a / 1e4:.2f}万"
+    return f"{n:.2f}"
+
+
+def _iso(d):
+    return d.isoformat() if hasattr(d, "isoformat") else (str(d) if d is not None else None)
+
+
+@router.get("/api/trading/dashboard/plates")
+async def trading_dashboard_plates(authorization: str = None):
+    """资金流向气泡。主力净额按亿返回，和页面 formatYi 一致。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (sector_code)
+                   sector_code, sector_name, pct, turnover, main_net_inflow, up_cnt
+            FROM sector_daily
+            ORDER BY sector_code, date DESC
+        """)
+        rows = cur.fetchall()
+    conn.close()
+    data = []
+    for r in rows:
+        inflow = r["main_net_inflow"]
+        data.append({
+            "code": r["sector_code"],
+            "name": r["sector_name"] or r["sector_code"],
+            "latestGrowthRate": r["pct"],
+            "latestCje": r["turnover"],
+            "latestLargeForce": (float(inflow) / 1e8) if inflow is not None else 0,
+            "latestStrong": r["up_cnt"] if r["up_cnt"] is not None else (abs(r["pct"]) if r["pct"] is not None else 0),
+        })
+    return envelope(data)
+
+
+@router.get("/api/market/index/shanghai/daily-k")
+async def shanghai_daily_k(startDate: str = None, endDate: str = None, authorization: str = None):
+    """上证指数日 K。页面用 startDate/endDate。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = """SELECT date, open, high, low, close,
+                        COALESCE(volume, 0) AS volume, COALESCE(amount, 0) AS amount
+                 FROM index_daily WHERE code = 'sh000001'"""
+        params = []
+        if startDate:
+            sql += " AND date >= %s"
+            params.append(startDate)
+        if endDate:
+            sql += " AND date <= %s"
+            params.append(endDate)
+        sql += " ORDER BY date"
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    conn.close()
+    data = [{
+        "date": _iso(r["date"]),
+        "open": r["open"] or 0,
+        "high": r["high"] or 0,
+        "low": r["low"] or 0,
+        "close": r["close"] or 0,
+        "volume": r["volume"] or 0,
+        "amount": r["amount"] or 0,
+    } for r in rows]
+    return envelope(data)
+
+
+@router.get("/api/trading/dashboard/plate/interval-stats")
+async def plate_interval_stats(startDate: str = None, endDate: str = None, authorization: str = None):
+    """区间统计。按板块汇总 sector_daily。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = """SELECT date, sector_code, sector_name, pct, main_net_inflow, turnover
+                 FROM sector_daily WHERE 1=1"""
+        params = []
+        if startDate:
+            sql += " AND date >= %s"
+            params.append(startDate)
+        if endDate:
+            sql += " AND date <= %s"
+            params.append(endDate)
+        sql += " ORDER BY sector_code, date"
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    conn.close()
+    buckets = {}
+    for r in rows:
+        b = buckets.setdefault(r["sector_code"], {
+            "code": r["sector_code"],
+            "name": r["sector_name"] or r["sector_code"],
+            "growth": 0.0,
+            "net": 0.0,
+            "turnover": 0.0,
+            "strength": 0.0,
+            "days": [],
+        })
+        pct = float(r["pct"] or 0)
+        net = float(r["main_net_inflow"] or 0)
+        turn = float(r["turnover"] or 0)
+        b["growth"] += pct
+        b["net"] += net
+        b["turnover"] += turn
+        b["strength"] = max(b["strength"], abs(pct))
+        b["days"].append(net)
+    data = []
+    for b in buckets.values():
+        streak = 0
+        for net in reversed(b["days"]):
+            if net > 0:
+                streak += 1
+            else:
+                break
+        data.append({
+            "code": b["code"],
+            "name": b["name"],
+            "intervalGrowthRateSum": round(b["growth"], 4),
+            "intervalNetAmount": _fmt_amount(b["net"]),
+            "intervalNetAmountRaw": b["net"],
+            "intervalStrength": round(b["strength"], 4),
+            "intervalTurnover": _fmt_amount(b["turnover"]),
+            "intervalTurnoverRaw": b["turnover"],
+            "netInflowStreakDays": streak,
+        })
+    data.sort(key=lambda x: x["intervalNetAmountRaw"], reverse=True)
+    return envelope(data)
+
+
+@router.get("/api/trading/dashboard/plate/daily-metrics")
+async def plate_daily_metrics(code: str, authorization: str = None):
+    """单板块日频序列，供区间统计详情图。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT date, pct, main_net_inflow, turnover
+            FROM sector_daily WHERE sector_code = %s ORDER BY date
+        """, (code,))
+        rows = cur.fetchall()
+    conn.close()
+    data = [{
+        "date": _iso(r["date"]),
+        "growthRate": r["pct"],
+        "largeForce": float(r["main_net_inflow"] or 0) / 1e8,
+        "strength": abs(float(r["pct"] or 0)),
+        "turnover": float(r["turnover"] or 0),
+    } for r in rows]
+    return envelope(data)
+
+
+@router.get("/api/topic/graph/neo4j-structure")
+async def topic_neo4j_structure(authorization: str = None):
+    """题材库图谱。节点 id 用名称，topicId 供详情查询。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT t.topic_id, t.name, COALESCE(g.name, '未分类') AS group_name
+            FROM topic t
+            LEFT JOIN topic_group g ON t.topic_group_id = g.id
+            ORDER BY g.name, t.name
+        """)
+        topics = cur.fetchall()
+        cur.execute("""SELECT source_topic_id, target_topic_id, relation FROM topic_links""")
+        edges = cur.fetchall()
+    conn.close()
+    id_of = {}
+    used = set()
+    nodes = []
+    for t in topics:
+        label = t["name"] or t["topic_id"]
+        node_id = label
+        if node_id in used:
+            node_id = f"{label}#{t['topic_id']}"
+        used.add(node_id)
+        id_of[t["topic_id"]] = node_id
+        nodes.append({"id": node_id, "topicId": t["topic_id"], "group": t["group_name"] or "未分类"})
+    links = []
+    for e in edges:
+        src = id_of.get(e["source_topic_id"])
+        dst = id_of.get(e["target_topic_id"])
+        if src and dst:
+            links.append({"source": src, "target": dst, "relation": e["relation"] or ""})
+    return envelope({"nodes": nodes, "links": links})
+
+
+@router.get("/api/topic/intro")
+async def topic_intro_query(topicId: str, authorization: str = None):
+    """题材简介。页面用 query topicId。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""SELECT topic_id, name, brief_intro, introduction, ai_introduction
+                       FROM topic WHERE topic_id = %s""", (topicId,))
+        row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return envelope({
+        "topicId": row["topic_id"],
+        "name": row["name"],
+        "briefIntro": row["brief_intro"] or "",
+        "introduction": row["introduction"] or "",
+        "aiIntroduction": row["ai_introduction"] or "",
+    })
+
+
+@router.get("/api/topic/category-stocks")
+async def topic_category_stocks_by_topic(topicId: str, authorization: str = None):
+    """题材下的分类树和个股。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT topic_id, name FROM topic WHERE topic_id = %s", (topicId,))
+        topic = cur.fetchone()
+        if not topic:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Topic not found")
+        cur.execute("""SELECT id, parent_id, name FROM topic_category
+                       WHERE topic_id = %s ORDER BY parent_id, name""", (topicId,))
+        cats = [dict(r) for r in cur.fetchall()]
+        codes = [f"theme_{c['id']}" for c in cats]
+        stocks_by_cat = {}
+        if codes:
+            cur.execute("""
+                SELECT m.sector_code, m.code, COALESCE(i.name, '') AS stock_name
+                FROM stock_sector_map m
+                LEFT JOIN instrument_master i ON i.code = m.code
+                WHERE m.kind = 'theme' AND m.sector_code = ANY(%s)
+                ORDER BY m.code
+            """, (codes,))
+            for s in cur.fetchall():
+                cid = s["sector_code"].replace("theme_", "", 1)
+                stocks_by_cat.setdefault(cid, []).append({
+                    "stockId": s["code"],
+                    "stockName": s["stock_name"] or "",
+                    "reason": "",
+                })
+    conn.close()
+    nodes = {}
+    for c in cats:
+        nodes[c["id"]] = {
+            "id": c["id"],
+            "name": c["name"],
+            "stocks": stocks_by_cat.get(c["id"], []),
+            "children": [],
+            "_parent": c["parent_id"],
+        }
+    roots = []
+    for n in nodes.values():
+        pid = n.pop("_parent")
+        if pid and pid != "0" and pid in nodes:
+            nodes[pid]["children"].append(n)
+        else:
+            roots.append(n)
+    return envelope({
+        "topicId": topic["topic_id"],
+        "topicName": topic["name"],
+        "categories": roots,
+    })
+
+
 # ─── Market 组 ────────────────────────────────────────────────────────
 
 @router.get("/api/market/radars")
@@ -449,6 +714,73 @@ async def market_dynamic_news(
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return envelope(rows)
+
+
+def _clock(ts):
+    if ts is None:
+        return "", ""
+    return _iso(ts)[:10], ts.strftime("%H:%M:%S") if hasattr(ts, "strftime") else ""
+
+
+@router.get("/api/market/dynamic/news")
+async def market_dynamic_news_alias(date: str = None, limit: int = Query(default=200, le=1000), authorization: str = None):
+    """盘中动态。页面要 comment/stock/time。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = """SELECT msg_ts, msg_id, code, title, content
+                 FROM market_messages WHERE 1=1"""
+        params = []
+        if date:
+            sql += " AND msg_ts::date = %s"
+            params.append(date)
+        sql += " ORDER BY msg_ts DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    conn.close()
+    data = []
+    for r in rows:
+        day, clock = _clock(r["msg_ts"])
+        data.append({
+            "id": r["msg_id"],
+            "date": day,
+            "time": clock,
+            "comment": r["content"] or r["title"] or "",
+            "stock": r["code"] or "",
+        })
+    return envelope(data)
+
+
+@router.get("/api/market/market-radars")
+async def market_radars_alias(date: str = None, limit: int = Query(default=200, le=1000), authorization: str = None):
+    """市场雷达。页面要 stockName/lbStatus/status/content。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = """SELECT ts, event_id, event_type, title, content, extra
+                 FROM radar_event WHERE 1=1"""
+        params = []
+        if date:
+            sql += " AND ts::date = %s"
+            params.append(date)
+        sql += " ORDER BY ts DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    conn.close()
+    data = []
+    for r in rows:
+        extra = r["extra"] if isinstance(r["extra"], dict) else {}
+        day, clock = _clock(r["ts"])
+        data.append({
+            "id": r["event_id"],
+            "date": day,
+            "time": clock,
+            "content": r["content"] or r["title"] or "",
+            "stockName": extra.get("stock_name") or r["title"] or "",
+            "lbStatus": extra.get("lb_status") or r["event_type"] or "",
+            "status": extra.get("status") or "",
+        })
+    return envelope(data)
 
 
 @router.get("/api/market/plate-movements")
@@ -783,9 +1115,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+@router.post("/auth/login")
 @router.post("/api/user/login")
 async def auth_login(req: LoginRequest):
-    """用户名密码登录 → 返回 bearer token"""
+    """用户名密码登录 → 返回 bearer token。/auth/login 为 web 新路径，/api/user/login 保留兼容。"""
     secrets = load_secrets()
     web_cfg = secrets.get("web", {})
     users = web_cfg.get("users", [])
@@ -901,6 +1234,7 @@ async def user_personal(authorize: str = None):
         "userId": "1",
         "userName": "admin",
         "roles": ["R_SUPER"],
+        "buttons": [],
         "avatar": "",
     })
 
@@ -946,7 +1280,7 @@ async def trading_system_tree(authorization: str = None):
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
-            SELECT id, parent_id, name, description, node_type, sort_order, color,
+            SELECT id, parent_id, name, description, sort_order, color,
                    created_time, updated_time
             FROM trading_system_node
             ORDER BY sort_order, created_time
@@ -989,11 +1323,11 @@ async def trading_system_node_create(request: Request, authorization: str = None
     conn = get_writer_conn()
     with conn.cursor() as cur:
         cur.execute("""
-            INSERT INTO trading_system_node (id, parent_id, name, description, node_type, sort_order, color)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO trading_system_node (id, parent_id, name, description, sort_order, color)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (
-            node_id, body.get("parentId"), body.get("name", ""),
-            body.get("description", ""), body.get("nodeType", "default"),
+            node_id, body.get("parentId") or "0", body.get("name", ""),
+            body.get("description", ""),
             body.get("sortOrder", 0), body.get("color"),
         ))
     conn.commit()

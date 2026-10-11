@@ -1,0 +1,76 @@
+-- V007: 每张业务表一句中文备注，便于在 Grafana 里浏览
+-- 2026-10-11
+
+COMMENT ON TABLE announcements IS '上市公司公告';
+COMMENT ON TABLE backfill_progress IS '历史补数进度，内部用，按作业和股票记录补到哪了';
+COMMENT ON TABLE base_rate IS '同类情形在历史上的命中率，给预测当参照';
+COMMENT ON TABLE bidding_list IS '集合竞价明细，开盘前打分用的原料';
+COMMENT ON TABLE block_trade IS '大宗交易成交记录';
+COMMENT ON TABLE catalyst_active_message IS '催化雷达当前有效的消息，和冲击卡一对一';
+COMMENT ON TABLE catalyst_impact IS '一条消息对板块或个股的冲击判断';
+COMMENT ON TABLE catalyst_system_state IS '催化雷达每次扫描时记下的系统状态';
+COMMENT ON TABLE cognition IS '观势写下的认知结论，同一条可以有多个版本';
+COMMENT ON TABLE dividend IS '分红、送股、转增';
+COMMENT ON TABLE dt_pool IS '当天跌停的股票';
+COMMENT ON TABLE dynamic_category_config IS '分类名称的配置，从旧系统迁来';
+COMMENT ON TABLE earnings_calendar IS '公司预计哪天披露财报';
+COMMENT ON TABLE etf_daily IS 'ETF 每天的开高低收';
+COMMENT ON TABLE finance_snapshot IS '个股最新财务指标快照，如净资产收益率、毛利率';
+COMMENT ON TABLE financial_reports IS '上市公司定期财报，含营收、利润和现金流';
+COMMENT ON TABLE fund_flow_sector IS '板块每天的资金流入流出';
+COMMENT ON TABLE fund_flow_stock IS '个股每天的资金流入流出';
+COMMENT ON TABLE global_daily IS '美股、港股和商品的日行情。日期是北京时间收到数据的那天，不是当地收盘日，也不看 A 股是否开市';
+COMMENT ON TABLE global_minute IS '美股、港股和商品的分钟行情，大约保留 3 年';
+COMMENT ON TABLE holder_num IS '股东户数';
+COMMENT ON TABLE index_daily IS 'A 股指数日线，如上证指数、沪深300';
+COMMENT ON TABLE index_minute IS '指数分钟线，大约保留 3 年';
+COMMENT ON TABLE ingest_log IS '采集作业每次运行的结果：成功、跳过、缺数或失败';
+COMMENT ON TABLE instrument_master IS '证券代码字典，股票、指数、ETF 的代码和名称';
+COMMENT ON TABLE job_registry IS '定时任务清单：跑什么、何时跑、是否启用';
+COMMENT ON TABLE lockup_calendar IS '限售股解禁日期';
+COMMENT ON TABLE macro_indicators IS '宏观经济指标，如 CPI、PMI';
+COMMENT ON TABLE margin_daily IS '全市场融资融券每天的汇总';
+COMMENT ON TABLE margin_stock IS '单只股票每天的融资融券余额';
+COMMENT ON TABLE market_messages IS '市场快讯。新数据来自东财或新浪，旧数据从原系统迁来';
+COMMENT ON TABLE news_telegraph IS '财经电报，按发布时间存标题和正文';
+COMMENT ON TABLE northbound_daily IS '北向资金每天的净流入';
+COMMENT ON TABLE note_category IS '交易笔记的分类';
+COMMENT ON TABLE option_contracts IS '期权合约名单，含标的、行权价和到期日';
+COMMENT ON TABLE option_greeks_iv IS '期权的隐含波动率和希腊字母';
+COMMENT ON TABLE option_tquote IS '期权每天的行情';
+COMMENT ON TABLE plate_movement_intraday IS '盘中板块异动，按 5 分钟采样';
+COMMENT ON TABLE policy_calendar IS '重要政策和经济事件的日历';
+COMMENT ON TABLE prediction IS '观势发出的预测，以及事后判定的命中、部分命中或落空';
+COMMENT ON TABLE quarantine IS '采集时校验没过、被单独存下来的原始行';
+COMMENT ON TABLE radar_event IS '盘中雷达抓到的异动事件';
+COMMENT ON TABLE reflection IS '预测结束后的复盘：对错、原因、教训和后续动作';
+COMMENT ON TABLE regime_daily IS '每个交易日的市场相态，用来解释当时为什么那样判断';
+COMMENT ON TABLE report IS '早报、晚报和专题报告';
+COMMENT ON TABLE schema_migrations IS '数据库结构升级记录，内部用';
+COMMENT ON TABLE sector_daily IS '板块每天的涨跌和成交';
+COMMENT ON TABLE sentiment_daily IS '每天的市场情绪：涨停家数、封板率、打板成功率和打板溢价';
+COMMENT ON TABLE session_def IS '交易时段，如集合竞价、上午连续竞价、下午连续竞价';
+COMMENT ON TABLE share_structure IS '总股本和流通股本';
+COMMENT ON TABLE stock_daily IS '个股日线行情';
+COMMENT ON TABLE stock_minute IS '个股分钟线，大约保留 3 年';
+COMMENT ON TABLE stock_news IS '挂到具体股票上的新闻';
+COMMENT ON TABLE stock_sector_map IS '股票属于哪些板块；板块调整后会留下历史记录';
+COMMENT ON TABLE theme_heat IS '题材每天有多热';
+COMMENT ON TABLE topic IS '题材主表';
+COMMENT ON TABLE topic_category IS '题材分类，树形';
+COMMENT ON TABLE topic_group IS '题材分组';
+COMMENT ON TABLE topic_links IS '题材之间的关联';
+COMMENT ON TABLE trade_cal IS 'A 股哪天开市、哪天休市';
+COMMENT ON TABLE trading_note IS '交易笔记正文';
+COMMENT ON TABLE trading_system_node IS '交易体系的树形节点，从旧系统迁来';
+COMMENT ON TABLE valuation_daily IS '个股每天的估值，如市盈率、市净率和市值';
+COMMENT ON TABLE verify_diff IS '两个数据源对账后的差异汇总';
+COMMENT ON TABLE verify_source IS '两个数据源逐条对账的明细';
+COMMENT ON TABLE watchlist IS '需要采集分钟线的股票池，上限约 200 只';
+COMMENT ON TABLE yzt_pool IS '昨天涨停的股票今天涨跌如何';
+COMMENT ON TABLE zb_pool IS '当天涨停后又被打开的股票';
+COMMENT ON TABLE zt_pool IS '当天封住涨停的股票';
+
+INSERT INTO schema_migrations (version, applied_at, checksum, note)
+VALUES ('V007', now(), 'table_comments_zh', '69 张业务表中文备注')
+ON CONFLICT (version) DO NOTHING;

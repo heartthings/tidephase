@@ -107,12 +107,12 @@ jobs:
     domain: D3
     target_tables: [zt_pool, zb_pool, dt_pool, yzt_pool]
     schedule_cron: "15 15 * * 1-5"
-    source_chain: ["eastmoney", "akshare"]
+    source_chain: ["ths", "eastmoney"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: true
     enabled: true
-    note: "涨停/炸板/跌停/昨涨今现池 15:15 终版；龙虎源待Z2 T-R1后启用"
+    note: "涨停/炸板/跌停池 15:15。主源同花顺 dataapi（东财 push2ex 本机 rc=205）。昨涨今现池源端无日期端点，显式 MISS"
 
   - job_name: j_sentiment_calc
     domain: D3
@@ -267,8 +267,8 @@ jobs:
     retry_policy: {"tries": 1, "backoff_s": [10]}
     timeout_s: 300
     critical: false
-    enabled: true
-    note: "预测状态同步 09:00/18:00（D12端点已活）"
+    enabled: false
+    note: "停用 2026-10-11。lovetrade 已下线，预测改由观势 POST /d12/prediction 直写。保留注册行留痕，禁止再向 prediction 覆写"
 
   - job_name: j_base_rate
     domain: D12
