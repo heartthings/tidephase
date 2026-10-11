@@ -110,20 +110,27 @@ async def catalyst_impacts_list(
     limit: int = Query(default=100, le=1000),
     authorization: str = None,
 ):
-    """catalyst_impacts 列表（映射到 cognition 表 F- 前缀）"""
+    """catalyst_impacts 列表（Z7-ext: 映射到 catalyst_impact 表）"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        sql = """SELECT cognition_id as id, type, title, statement, confidence, status,
-                        regime_scope, falsifications, created_at, updated_at
-                 FROM cognition WHERE cognition_id LIKE 'F-%'"""
+        sql = """SELECT impact_id as id, date, message_summary, message_type, impact_level,
+                        lifecycle_stage, remaining_influence, confidence, global_coupling,
+                        verified_result, created_time, updated_time
+                 FROM catalyst_impact WHERE 1=1"""
         params = []
+        if date_from:
+            sql += " AND date >= %s"
+            params.append(date_from)
+        if date_to:
+            sql += " AND date <= %s"
+            params.append(date_to)
         if message_type:
-            sql += " AND type = %s"
+            sql += " AND message_type = %s"
             params.append(message_type)
         if lifecycle_stage:
-            sql += " AND status = %s"
+            sql += " AND lifecycle_stage = %s"
             params.append(lifecycle_stage)
-        sql += " ORDER BY created_at DESC LIMIT %s"
+        sql += " ORDER BY date DESC, impact_level DESC LIMIT %s"
         params.append(limit)
         cur.execute(sql, params)
         rows = [dict(r) for r in cur.fetchall()]
@@ -136,7 +143,7 @@ async def catalyst_impact_get(impact_id: str, authorization: str = None):
     """单个 impact 详情"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""SELECT * FROM cognition WHERE cognition_id = %s""", (impact_id,))
+        cur.execute("""SELECT * FROM catalyst_impact WHERE impact_id = %s""", (impact_id,))
         row = cur.fetchone()
     conn.close()
     if not row:
@@ -189,13 +196,14 @@ async def catalyst_system_states_list(
     limit: int = Query(default=50, le=500),
     authorization: str = None,
 ):
-    """system_states 列表（映射到 cognition 表 M- 前缀）"""
+    """system_states 列表（Z7-ext: 映射到 catalyst_system_state 表）"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""SELECT cognition_id as id, title, statement, regime_scope,
-                              created_at, updated_at
-                       FROM cognition WHERE cognition_id LIKE 'M-%'
-                       ORDER BY created_at DESC LIMIT %s""", (limit,))
+        cur.execute("""SELECT scan_session, date, scan_time, overall_phase,
+                              overall_note, global_coupling, sentiment,
+                              created_time, updated_time
+                       FROM catalyst_system_state
+                       ORDER BY date DESC, scan_time DESC LIMIT %s""", (limit,))
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return envelope(rows)
@@ -206,7 +214,7 @@ async def catalyst_system_state_get(state_id: str, authorization: str = None):
     """单个 system_state 详情"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT * FROM cognition WHERE cognition_id = %s", (state_id,))
+        cur.execute("SELECT * FROM catalyst_system_state WHERE scan_session = %s", (state_id,))
         row = cur.fetchone()
     conn.close()
     if not row:
@@ -220,15 +228,16 @@ async def catalyst_active_messages_list(
     limit: int = Query(default=100, le=500),
     authorization: str = None,
 ):
-    """active_messages（从 cognition F- 中筛选 status='active'）"""
+    """active_messages（Z7-ext: 映射到 catalyst_active_message 表）"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        sql = """SELECT cognition_id as id, title, statement, confidence, status,
-                        created_at, updated_at
-                 FROM cognition WHERE cognition_id LIKE 'F-%'"""
+        sql = """SELECT am_id as id, impact_id, message_title, current_stage,
+                        remaining_influence, is_active, expected_decay_date,
+                        daily_updates, created_time, updated_time
+                 FROM catalyst_active_message WHERE 1=1"""
         if is_active:
-            sql += " AND status = 'active'"
-        sql += " ORDER BY updated_at DESC LIMIT %s"
+            sql += " AND is_active = true"
+        sql += " ORDER BY updated_time DESC LIMIT %s"
         cur.execute(sql, (limit,))
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
@@ -246,12 +255,13 @@ async def catalyst_accuracy(
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = """SELECT category, horizon,
                         COUNT(*) as total,
-                        SUM((result = 'hit')::int) as hits,
+                        SUM(CASE WHEN result = 'hit' THEN 1 WHEN result = 'partial' THEN 0.5 ELSE 0 END) as hits,
                         SUM((result = 'miss')::int) as misses,
-                        ROUND(SUM((result = 'hit')::int)::numeric
-                              / NULLIF(SUM((result IN ('hit','miss'))::int), 0) * 100, 1) as hit_rate_pct
+                        ROUND(
+                            SUM(CASE WHEN result = 'hit' THEN 1 WHEN result = 'partial' THEN 0.5 ELSE 0 END)::numeric
+                            / NULLIF(SUM((result IN ('hit','miss','partial'))::int), 0) * 100, 1) as hit_rate_pct
                  FROM prediction
-                 WHERE prediction_id LIKE 'P-%' AND result IN ('hit','miss')"""
+                 WHERE prediction_id LIKE 'P-%' AND result IN ('hit','miss','partial')"""
         params = []
         if category:
             sql += " AND category = %s"
@@ -271,19 +281,19 @@ async def catalyst_dashboard(authorization: str = None):
     """catalyst 聚合看板"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        # 总览
+        # 总览 (Z7-ext: 使用新催化雷达表)
         cur.execute("""SELECT
-            (SELECT COUNT(*) FROM cognition WHERE cognition_id LIKE 'F-%') as total_impacts,
-            (SELECT COUNT(*) FROM cognition WHERE cognition_id LIKE 'F-%' AND status='active') as active_impacts,
+            (SELECT COUNT(*) FROM catalyst_impact) as total_impacts,
+            (SELECT COUNT(*) FROM catalyst_impact WHERE lifecycle_stage NOT IN ('decay','closed')) as active_impacts,
             (SELECT COUNT(*) FROM prediction WHERE prediction_id LIKE 'P-%') as total_predictions,
             (SELECT COUNT(*) FROM prediction WHERE prediction_id LIKE 'P-%' AND result='pending') as pending_predictions,
-            (SELECT COUNT(*) FROM cognition WHERE cognition_id LIKE 'M-%') as total_system_states
+            (SELECT COUNT(*) FROM catalyst_system_state) as total_system_states
         """)
         overview = dict(cur.fetchone())
         # 最近 5 条 impact
-        cur.execute("""SELECT cognition_id as id, title, status, created_at
-                       FROM cognition WHERE cognition_id LIKE 'F-%'
-                       ORDER BY created_at DESC LIMIT 5""")
+        cur.execute("""SELECT impact_id as id, message_summary, lifecycle_stage, date
+                       FROM catalyst_impact
+                       ORDER BY date DESC LIMIT 5""")
         recent_impacts = [dict(r) for r in cur.fetchall()]
         # 最近 5 条 prediction
         cur.execute("""SELECT prediction_id as id, statement, result, check_date

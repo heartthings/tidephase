@@ -28,6 +28,7 @@ from data_api.reflection_pack import (
     DEFAULT_ROUTE_MAP,
 )
 from data_api.lovetrade_routes import router as lovetrade_router
+from data_api.z7ext_routes import router as z7ext_router, init_auth as z7ext_init_auth
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("data-api")
@@ -73,6 +74,13 @@ def load_meta() -> dict:
             "note_category", "trading_note", "report",
             "dynamic_category_config", "trading_system_node",
             "plate_movement_intraday",
+            # Z7-ext 催化雷达三表
+            "catalyst_impact", "catalyst_active_message", "catalyst_system_state",
+            # Z7-ext 白名单补全
+            "radar_event", "regime_daily",
+        ],
+        "no_code_tables": [
+            "sector_daily", "theme_heat",
         ],
         "code_aliases": {
             "KS11": "KOSPI",
@@ -227,6 +235,10 @@ app = FastAPI(
 
 # Z8 W2: 注册 lovetrade 路由
 app.include_router(lovetrade_router)
+
+# Z7-ext: 注册催化雷达路由（需要在 auth 函数定义之后初始化）
+z7ext_init_auth(require_read, require_write, get_reader_conn, get_d12writer_conn)
+app.include_router(z7ext_router)
 
 # ─── E1 /health ────────────────────────────────────────────────────────
 
@@ -487,8 +499,15 @@ async def data_query(
         # Z7c-fix: 自适应排序列（统一探测，供日期过滤/游标/ORDER BY 共用）
         sort_info = _detect_table_sort(conn, table)
 
-        # 日期过滤 (Z7c-fix: 自适应日期列)
-        _date_col_map = {"news_telegraph": "pub_ts", "stock_news": "pub_ts", "announcements": "pub_ts"}
+        # 日期过滤 (Z7c-fix + Z7-ext: 自适应日期列)
+        _date_col_map = {
+            "news_telegraph": "pub_ts", "stock_news": "pub_ts", "announcements": "pub_ts",
+            "market_messages": "msg_ts",
+            "prediction": "created_at",
+            "radar_event": "ts",
+            "catalyst_impact": "date",
+            "catalyst_system_state": "date",
+        }
         filter_date_col = _date_col_map.get(table) or sort_info.get("date_col") or "date"
         if start and filter_date_col:
             sql += f" AND {filter_date_col} >= %s"
@@ -497,13 +516,24 @@ async def data_query(
             sql += f" AND {filter_date_col} <= %s"
             params.append(end)
 
-        # 代码过滤
-        if codes:
+        # 代码过滤 (Z7-ext: 自适应 code 列名)
+        if codes and sort_info.get("has_code"):
             code_list = [c.strip() for c in codes.split(",") if c.strip()]
             if code_list:
                 placeholders = ", ".join(["%s"] * len(code_list))
                 sql += f" AND code IN ({placeholders})"
                 params.extend(code_list)
+        elif codes and not sort_info.get("has_code"):
+            # Try sector_code for sector_daily/theme_heat
+            code_col = None
+            if table in ("sector_daily", "theme_heat"):
+                code_col = "sector_code"
+            if code_col:
+                code_list = [c.strip() for c in codes.split(",") if c.strip()]
+                if code_list:
+                    placeholders = ", ".join(["%s"] * len(code_list))
+                    sql += f" AND {code_col} IN ({placeholders})"
+                    params.extend(code_list)
 
         # 游标分页 (Z7c-fix: 自适应排序列)
         if cursor and sort_info.get("date_col"):
@@ -831,8 +861,8 @@ async def update_prediction_result(
     result = body.get("result")
     result_note = body.get("result_note")
 
-    if result not in ("hit", "miss", "pending", "invalid", "expired"):
-        return error_response("BAD_PARAM", f"result must be hit/miss/pending/invalid/expired, got '{result}'", 400)
+    if result not in ("hit", "miss", "partial", "pending", "invalid", "expired"):
+        return error_response("BAD_PARAM", f"result must be hit/miss/partial/pending/invalid/expired, got '{result}'", 400)
     if not result_note:
         return error_response("BAD_PARAM", "result_note is required for manual override", 400)
 
