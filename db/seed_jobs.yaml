@@ -133,8 +133,8 @@ jobs:
     retry_policy: {"tries": 3, "backoff_s": [2, 5, 10]}
     timeout_s: 600
     critical: false
-    enabled: false
-    note: "竞价列表09:26终版；主源tencent(整改2026-10-09)，备源eastmoney；龙虎MorningBiddingList待Z2 T-R1后启用"
+    enabled: true
+    note: "竞价列表09:26终版。P2-1修复：启用以捕获09:25撮合后完整数据（jjje/jjcje/jjhs有值率应>90%）"
 
   - job_name: j_stock_minute
     domain: D2
