@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 RETRY_BACKOFF_S = [2, 5, 10]  # 督军整改项#3：间歇容错退避
 
 
+def _quotations_type(hour_min: int):
+    """竞价快照类型。09:36 之后返回 None，避免把盘中行情写成 09:26 终版。"""
+    if hour_min <= 915:
+        return 1
+    if hour_min <= 920:
+        return 2
+    if hour_min <= 925:
+        return 3
+    if hour_min <= 935:
+        return 9
+    return None
+
+
 def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, trigger="scheduled"):
     """Execute j_bidding_list."""
     from dworker.core.calendar_gate import check_trade_gate
@@ -47,16 +60,18 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
             "note": note,
         }
 
-    # Determine quotations_type based on current time
+    # 1=09:15  2=09:20  3=09:25  9=09:26 终版。
+    # 腾讯 qt 只在竞价时段返回竞价额。过了 09:35 再跑会把盘中成交写成终版，直接跳过。
     hour_min = now.hour * 100 + now.minute
-    if hour_min <= 915:
-        quotations_type = 1
-    elif hour_min <= 920:
-        quotations_type = 2
-    elif hour_min <= 925:
-        quotations_type = 3
-    else:
-        quotations_type = 9  # final
+    quotations_type = _quotations_type(hour_min)
+    if quotations_type is None:
+        note = f"SKIP: auction window closed at {now.strftime('%H:%M')}, refuse live quotes as type=9"
+        logger.info(f"[j_bidding_list] {note}")
+        return {
+            "success": True, "source_used": "none",
+            "rows_in": 0, "rows_written": 0, "rows_quarantined": 0,
+            "note": note,
+        }
 
     all_rows = []
     source_used = None

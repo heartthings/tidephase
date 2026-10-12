@@ -1,4 +1,4 @@
-"""覆盖检查。最近一个交易日的关键表有没有行。检查本身跑完，缺表记 FAIL。"""
+"""覆盖检查。上一交易日的关键表有没有行。07:15 跑，当天收盘数据还没到，不把今天算进去。缺表记 FAIL。"""
 from datetime import datetime, timedelta, timezone
 
 TZ = timezone(timedelta(hours=8))
@@ -15,7 +15,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     with conn.cursor() as cur:
         cur.execute("""
             SELECT max(cal_date) FROM trade_cal
-            WHERE market = 'SSE' AND is_open = 1 AND cal_date <= %s
+            WHERE market = 'SSE' AND is_open = 1 AND cal_date < %s
         """, (datetime.now(TZ).date().isoformat(),))
         day = cur.fetchone()[0]
         parts = []

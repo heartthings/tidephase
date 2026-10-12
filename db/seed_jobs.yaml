@@ -142,10 +142,10 @@ jobs:
     schedule_cron: "45 15 * * 1-5"
     source_chain: ["tencent"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
-    timeout_s: 600
+    timeout_s: 3600
     critical: false
     enabled: true
-    note: "观察池1m。只采 watchlist.active，池子空则 SKIP"
+    note: "全市场个股1m 15:45。沪深腾讯mkline最近400根；北交所mkline无分钟K，走分时。定时只落当天"
 
   - job_name: j_verify_daily
     domain: pipeline
