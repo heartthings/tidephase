@@ -73,13 +73,13 @@ jobs:
   - job_name: j_index_minute
     domain: D1
     target_tables: [index_minute]
-    schedule_cron: "0 16 * * 1-5"
-    source_chain: ["tencent"]
+    schedule_cron: "2 10-12,14-16 * * 1-5"
+    source_chain: ["tencent", "eastmoney"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: false
     enabled: true
-    note: "六大指数1m。腾讯 ifzq，只落目标交易日"
+    note: "六大指数1m。10/11/12/14/15/16点02分。腾讯分钟量，东财分钟额"
 
   - job_name: j_stock_daily
     domain: D2

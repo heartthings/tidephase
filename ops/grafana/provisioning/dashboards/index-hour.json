@@ -1,0 +1,584 @@
+{
+  "uid": "index-hour",
+  "title": "指数小时成交",
+  "tags": [
+    "market",
+    "index",
+    "intraday"
+  ],
+  "timezone": "Asia/Shanghai",
+  "schemaVersion": 39,
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "几天在同一张图上，纵轴相同。横轴只标日期。鼠标放在柱子上能看到是 10:00、11:00、11:30、14:00 还是 15:00。\n\n同一小时从左到右并排。**蓝是沪市**：上证指数深、上证50浅。**橙是深市**：深证成指深、创业板浅。**绿是沪深300**，**紫是科创50**。成交量是亿手，成交额是亿元。"
+      }
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "宽基成交量（亿手）",
+      "description": "上证指数、深证成指、沪深300。",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "刻度"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": true,
+                  "legend": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上证指数"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3D8BFD"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "深证成指"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF7A45"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "沪深300"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2FCB8C"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xField": "刻度",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 12,
+        "xTickLabelSpacing": 0,
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.78,
+        "barWidth": 0.7,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "WITH src AS (SELECT ts, (ts AT TIME ZONE 'Asia/Shanghai')::date AS d, to_char(ts AT TIME ZONE 'Asia/Shanghai', 'HH24:MI') AS hm, extract(doy FROM (ts AT TIME ZONE 'Asia/Shanghai'))::int AS doy, round((sum(volume) FILTER (WHERE code='sh000001')/1e8)::numeric, 2) AS a, round((sum(volume) FILTER (WHERE code='sz399001')/1e8)::numeric, 2) AS b, round((sum(volume) FILTER (WHERE code='sh000300')/1e8)::numeric, 2) AS c FROM index_hour WHERE code IN ('sh000001','sz399001','sh000300') AND ts >= $__timeFrom() AND ts < $__timeTo() GROUP BY ts), banner AS (SELECT ((d + time '09:00') AT TIME ZONE 'Asia/Shanghai') AS ts, to_char(d, 'MM\"月\"DD\"日\"') AS slot, to_char(d, 'MM\"月\"DD\"日\"') AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM (SELECT DISTINCT d FROM src) s), hours AS (SELECT ts, repeat(chr(8203), doy * 20 + CASE hm WHEN '10:00' THEN 1 WHEN '11:00' THEN 2 WHEN '11:30' THEN 3 WHEN '14:00' THEN 4 WHEN '15:00' THEN 5 ELSE 6 END) AS slot, hm AS tip, a, b, c FROM src), lunch AS (SELECT ((d + time '12:00') AT TIME ZONE 'Asia/Shanghai') AS ts, repeat(chr(8203), doy * 20 + 7) AS slot, '午休' AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src WHERE hm = '11:30'), gutter AS (SELECT ((d + time '16:00') AT TIME ZONE 'Asia/Shanghai') + (n || ' hours')::interval AS ts, repeat(chr(8203), doy * 20 + 10 + n) AS slot, NULL::text AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src CROSS JOIN generate_series(1, 3) AS n WHERE hm = '15:00' AND d < (SELECT max(d) FROM src)) SELECT slot AS \"刻度\", tip AS \"时间\", a AS \"上证指数\", b AS \"深证成指\", c AS \"沪深300\" FROM (SELECT ts, slot, tip, a, b, c FROM banner UNION ALL SELECT ts, slot, tip, a, b, c FROM hours UNION ALL SELECT ts, slot, tip, a, b, c FROM lunch UNION ALL SELECT ts, slot, tip, a, b, c FROM gutter) u ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "结构成交量（亿手）",
+      "description": "上证50、创业板指、科创50。",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "刻度"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": true,
+                  "legend": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上证50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9CC7FF"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "创业板指"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FFB088"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "科创50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C9A6FF"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xField": "刻度",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 12,
+        "xTickLabelSpacing": 0,
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.78,
+        "barWidth": 0.7,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "WITH src AS (SELECT ts, (ts AT TIME ZONE 'Asia/Shanghai')::date AS d, to_char(ts AT TIME ZONE 'Asia/Shanghai', 'HH24:MI') AS hm, extract(doy FROM (ts AT TIME ZONE 'Asia/Shanghai'))::int AS doy, round((sum(volume) FILTER (WHERE code='sh000016')/1e8)::numeric, 2) AS a, round((sum(volume) FILTER (WHERE code='sz399006')/1e8)::numeric, 2) AS b, round((sum(volume) FILTER (WHERE code='sh000688')/1e8)::numeric, 2) AS c FROM index_hour WHERE code IN ('sh000016','sz399006','sh000688') AND ts >= $__timeFrom() AND ts < $__timeTo() GROUP BY ts), banner AS (SELECT ((d + time '09:00') AT TIME ZONE 'Asia/Shanghai') AS ts, to_char(d, 'MM\"月\"DD\"日\"') AS slot, to_char(d, 'MM\"月\"DD\"日\"') AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM (SELECT DISTINCT d FROM src) s), hours AS (SELECT ts, repeat(chr(8203), doy * 20 + CASE hm WHEN '10:00' THEN 1 WHEN '11:00' THEN 2 WHEN '11:30' THEN 3 WHEN '14:00' THEN 4 WHEN '15:00' THEN 5 ELSE 6 END) AS slot, hm AS tip, a, b, c FROM src), lunch AS (SELECT ((d + time '12:00') AT TIME ZONE 'Asia/Shanghai') AS ts, repeat(chr(8203), doy * 20 + 7) AS slot, '午休' AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src WHERE hm = '11:30'), gutter AS (SELECT ((d + time '16:00') AT TIME ZONE 'Asia/Shanghai') + (n || ' hours')::interval AS ts, repeat(chr(8203), doy * 20 + 10 + n) AS slot, NULL::text AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src CROSS JOIN generate_series(1, 3) AS n WHERE hm = '15:00' AND d < (SELECT max(d) FROM src)) SELECT slot AS \"刻度\", tip AS \"时间\", a AS \"上证50\", b AS \"创业板指\", c AS \"科创50\" FROM (SELECT ts, slot, tip, a, b, c FROM banner UNION ALL SELECT ts, slot, tip, a, b, c FROM hours UNION ALL SELECT ts, slot, tip, a, b, c FROM lunch UNION ALL SELECT ts, slot, tip, a, b, c FROM gutter) u ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "barchart",
+      "title": "宽基成交额（亿元）",
+      "description": "颜色与宽基成交量一致。",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "刻度"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": true,
+                  "legend": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上证指数"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3D8BFD"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "深证成指"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF7A45"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "沪深300"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2FCB8C"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xField": "刻度",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 12,
+        "xTickLabelSpacing": 0,
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.78,
+        "barWidth": 0.7,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "WITH src AS (SELECT ts, (ts AT TIME ZONE 'Asia/Shanghai')::date AS d, to_char(ts AT TIME ZONE 'Asia/Shanghai', 'HH24:MI') AS hm, extract(doy FROM (ts AT TIME ZONE 'Asia/Shanghai'))::int AS doy, round((sum(amount) FILTER (WHERE code='sh000001')/1e8)::numeric, 0) AS a, round((sum(amount) FILTER (WHERE code='sz399001')/1e8)::numeric, 0) AS b, round((sum(amount) FILTER (WHERE code='sh000300')/1e8)::numeric, 0) AS c FROM index_hour WHERE code IN ('sh000001','sz399001','sh000300') AND ts >= $__timeFrom() AND ts < $__timeTo() GROUP BY ts), banner AS (SELECT ((d + time '09:00') AT TIME ZONE 'Asia/Shanghai') AS ts, to_char(d, 'MM\"月\"DD\"日\"') AS slot, to_char(d, 'MM\"月\"DD\"日\"') AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM (SELECT DISTINCT d FROM src) s), hours AS (SELECT ts, repeat(chr(8203), doy * 20 + CASE hm WHEN '10:00' THEN 1 WHEN '11:00' THEN 2 WHEN '11:30' THEN 3 WHEN '14:00' THEN 4 WHEN '15:00' THEN 5 ELSE 6 END) AS slot, hm AS tip, a, b, c FROM src), lunch AS (SELECT ((d + time '12:00') AT TIME ZONE 'Asia/Shanghai') AS ts, repeat(chr(8203), doy * 20 + 7) AS slot, '午休' AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src WHERE hm = '11:30'), gutter AS (SELECT ((d + time '16:00') AT TIME ZONE 'Asia/Shanghai') + (n || ' hours')::interval AS ts, repeat(chr(8203), doy * 20 + 10 + n) AS slot, NULL::text AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src CROSS JOIN generate_series(1, 3) AS n WHERE hm = '15:00' AND d < (SELECT max(d) FROM src)) SELECT slot AS \"刻度\", tip AS \"时间\", a AS \"上证指数\", b AS \"深证成指\", c AS \"沪深300\" FROM (SELECT ts, slot, tip, a, b, c FROM banner UNION ALL SELECT ts, slot, tip, a, b, c FROM hours UNION ALL SELECT ts, slot, tip, a, b, c FROM lunch UNION ALL SELECT ts, slot, tip, a, b, c FROM gutter) u ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "barchart",
+      "title": "结构成交额（亿元）",
+      "description": "颜色与结构成交量一致。",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "刻度"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": true,
+                  "legend": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上证50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9CC7FF"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "创业板指"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FFB088"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "科创50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C9A6FF"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xField": "刻度",
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 12,
+        "xTickLabelSpacing": 0,
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.78,
+        "barWidth": 0.7,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "WITH src AS (SELECT ts, (ts AT TIME ZONE 'Asia/Shanghai')::date AS d, to_char(ts AT TIME ZONE 'Asia/Shanghai', 'HH24:MI') AS hm, extract(doy FROM (ts AT TIME ZONE 'Asia/Shanghai'))::int AS doy, round((sum(amount) FILTER (WHERE code='sh000016')/1e8)::numeric, 0) AS a, round((sum(amount) FILTER (WHERE code='sz399006')/1e8)::numeric, 0) AS b, round((sum(amount) FILTER (WHERE code='sh000688')/1e8)::numeric, 0) AS c FROM index_hour WHERE code IN ('sh000016','sz399006','sh000688') AND ts >= $__timeFrom() AND ts < $__timeTo() GROUP BY ts), banner AS (SELECT ((d + time '09:00') AT TIME ZONE 'Asia/Shanghai') AS ts, to_char(d, 'MM\"月\"DD\"日\"') AS slot, to_char(d, 'MM\"月\"DD\"日\"') AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM (SELECT DISTINCT d FROM src) s), hours AS (SELECT ts, repeat(chr(8203), doy * 20 + CASE hm WHEN '10:00' THEN 1 WHEN '11:00' THEN 2 WHEN '11:30' THEN 3 WHEN '14:00' THEN 4 WHEN '15:00' THEN 5 ELSE 6 END) AS slot, hm AS tip, a, b, c FROM src), lunch AS (SELECT ((d + time '12:00') AT TIME ZONE 'Asia/Shanghai') AS ts, repeat(chr(8203), doy * 20 + 7) AS slot, '午休' AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src WHERE hm = '11:30'), gutter AS (SELECT ((d + time '16:00') AT TIME ZONE 'Asia/Shanghai') + (n || ' hours')::interval AS ts, repeat(chr(8203), doy * 20 + 10 + n) AS slot, NULL::text AS tip, NULL::numeric AS a, NULL::numeric AS b, NULL::numeric AS c FROM src CROSS JOIN generate_series(1, 3) AS n WHERE hm = '15:00' AND d < (SELECT max(d) FROM src)) SELECT slot AS \"刻度\", tip AS \"时间\", a AS \"上证50\", b AS \"创业板指\", c AS \"科创50\" FROM (SELECT ts, slot, tip, a, b, c FROM banner UNION ALL SELECT ts, slot, tip, a, b, c FROM hours UNION ALL SELECT ts, slot, tip, a, b, c FROM lunch UNION ALL SELECT ts, slot, tip, a, b, c FROM gutter) u ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "区间内最近一个交易日，按小时",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "WITH latest AS (SELECT max(ts) AS ts FROM index_hour WHERE ts >= $__timeFrom() AND ts < $__timeTo()) SELECT to_char(h.ts AT TIME ZONE 'Asia/Shanghai', 'MM-DD HH24:MI') AS \"小时\", round((sum(volume) FILTER (WHERE code='sh000001')/1e8)::numeric, 2) AS \"上证量\", round((sum(amount) FILTER (WHERE code='sh000001')/1e8)::numeric, 0) AS \"上证额\", round((sum(volume) FILTER (WHERE code='sz399001')/1e8)::numeric, 2) AS \"深成量\", round((sum(amount) FILTER (WHERE code='sz399001')/1e8)::numeric, 0) AS \"深成额\", round((sum(volume) FILTER (WHERE code='sh000300')/1e8)::numeric, 2) AS \"沪深300量\", round((sum(amount) FILTER (WHERE code='sh000300')/1e8)::numeric, 0) AS \"沪深300额\", round((sum(volume) FILTER (WHERE code='sz399006')/1e8)::numeric, 2) AS \"创业板量\", round((sum(amount) FILTER (WHERE code='sz399006')/1e8)::numeric, 0) AS \"创业板额\", round((sum(volume) FILTER (WHERE code='sh000016')/1e8)::numeric, 2) AS \"上证50量\", round((sum(amount) FILTER (WHERE code='sh000016')/1e8)::numeric, 0) AS \"上证50额\", round((sum(volume) FILTER (WHERE code='sh000688')/1e8)::numeric, 2) AS \"科创50量\", round((sum(amount) FILTER (WHERE code='sh000688')/1e8)::numeric, 0) AS \"科创50额\" FROM index_hour h JOIN latest ON true WHERE h.ts >= (date_trunc('day', latest.ts AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai') AND h.ts < (date_trunc('day', latest.ts AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai') + interval '1 day' GROUP BY h.ts ORDER BY h.ts"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "区间内每日合计",
+      "description": "量是亿手，额是亿元。",
+      "datasource": {
+        "type": "postgres",
+        "uid": "market_tsdb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "market_tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT (ts AT TIME ZONE 'Asia/Shanghai')::date AS \"日期\", round((sum(volume) FILTER (WHERE code='sh000001')/1e8)::numeric, 2) AS \"上证量\", round((sum(amount) FILTER (WHERE code='sh000001')/1e8)::numeric, 0) AS \"上证额\", round((sum(volume) FILTER (WHERE code='sz399001')/1e8)::numeric, 2) AS \"深成量\", round((sum(amount) FILTER (WHERE code='sz399001')/1e8)::numeric, 0) AS \"深成额\", round((sum(volume) FILTER (WHERE code='sh000300')/1e8)::numeric, 2) AS \"沪深300量\", round((sum(amount) FILTER (WHERE code='sh000300')/1e8)::numeric, 0) AS \"沪深300额\", round((sum(volume) FILTER (WHERE code='sz399006')/1e8)::numeric, 2) AS \"创业板量\", round((sum(amount) FILTER (WHERE code='sz399006')/1e8)::numeric, 0) AS \"创业板额\", round((sum(volume) FILTER (WHERE code='sh000016')/1e8)::numeric, 2) AS \"上证50量\", round((sum(amount) FILTER (WHERE code='sh000016')/1e8)::numeric, 0) AS \"上证50额\", round((sum(volume) FILTER (WHERE code='sh000688')/1e8)::numeric, 2) AS \"科创50量\", round((sum(amount) FILTER (WHERE code='sh000688')/1e8)::numeric, 0) AS \"科创50额\" FROM index_hour WHERE ts >= $__timeFrom() AND ts < $__timeTo() GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    }
+  ]
+}

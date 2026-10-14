@@ -2,8 +2,10 @@
 j_sector_daily - 概念板块日行情
 目标表：sector_daily、theme_heat
 主源：龙虎 RealRankingInfo ZSType=7（代码 801xxx，和 lovetrade 迁过来的历史同一套）
-列语义按 docs/field_dict_longhu_draft.md：
-  [4] 涨幅%  [5] 成交额元  [6] 主力净额元  [2] 强度（写入 theme_heat）
+列语义（2026-10-13 用东财 BK1283 银行逐日对过）：
+  [3] 当日涨跌幅（百分点）。[18] 与 [3] 相同。
+  [4] 不是当日涨跌幅，数值挤在 0 附近，不能写入 pct。
+  [5] 成交额元  [6] 主力净额元  [2] 强度（写入 theme_heat）
 备源：腾讯 pt01 报价。腾讯没有主力净额，该列留 NULL。
 
 params['date'] 传给龙虎 Date。实测 Date=2026-10-08 与 10-09 数值不同，
@@ -122,7 +124,7 @@ def _fetch_longhu(trade_date: str) -> list:
                 "date": trade_date,
                 "sector_code": code,
                 "sector_name": item[1],
-                "pct": _num(item[4]),
+                "pct": _num(item[3]),
                 "close": None,
                 "turnover": _num(item[5]),
                 "main_net": _num(item[6]),
@@ -208,7 +210,9 @@ def _write_sector(conn, rows: list, source: str) -> int:
                     close=COALESCE(EXCLUDED.close, sector_daily.close),
                     main_net_inflow=EXCLUDED.main_net_inflow,
                     turnover=EXCLUDED.turnover,
-                    source=EXCLUDED.source, ingest_ts=now()
+                    source=EXCLUDED.source,
+                    caliber_warning=NULL,
+                    ingest_ts=now()
             """, (
                 r["date"], r["sector_code"], r["sector_name"],
                 r["pct"], r.get("close"), r.get("main_net"), r.get("turnover"),

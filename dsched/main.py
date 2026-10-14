@@ -78,6 +78,7 @@ def seed_job_registry(conn, jobs: list):
                     critical = EXCLUDED.critical,
                     enabled = EXCLUDED.enabled,
                     schedule_cron = EXCLUDED.schedule_cron,
+                    note = EXCLUDED.note,
                     updated_at = now()
             """, (
                 job["job_name"],
