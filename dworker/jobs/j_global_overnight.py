@@ -11,7 +11,7 @@ j_global_overnight - 全球品种隔夜数据
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 # Format: (qt_code, standard_code, market, name, parse_type)
 # parse_type: "tilde" for ~-separated, "comma" for ,-separated
 # B2 修复(2026-10-10): 统一 code 口径，NK225→N225，新增 N225 品种
+TZ = timezone(timedelta(hours=8))
+
+# 恒生不在这里写。07:30 港股还没开，报价会被当成当天收盘。
+# 恒生、国企指数只由 j_global_asia 在 16:00 收盘后写入。
 GLOBAL_VARIETIES = [
     # US indices (tilde format)
     ("us.DJI", "DJI", "US", "道琼斯", "tilde"),
     ("us.INX", "SPX", "US", "标普500", "tilde"),
     ("us.IXIC", "IXIC", "US", "纳斯达克", "tilde"),
-    # HK (tilde format)
-    ("hkHSI", "HSI", "HK", "恒生指数", "tilde"),
-    # Japan (tencent 不直接支持，走 eastmoney 备源)
-    # ("hkN225", "N225", "JP", "日经225", "tilde"),  # tencent 覆盖有限
-    # Commodities (comma format)
+    # Commodities (comma format). close 用昨结算，不用此刻的最新价。
     ("hf_GC", "GC", "COMMODITY", "黄金", "comma"),
     ("hf_SI", "SI", "COMMODITY", "白银", "comma"),
     ("hf_CL", "CL", "COMMODITY", "WTI原油", "comma"),
@@ -44,7 +44,7 @@ EASTMONEY_GLOBAL_MAP = {
 def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, trigger="scheduled"):
     """Execute j_global_overnight."""
     t0 = time.time()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
 
     all_rows = []
     source_used = None
@@ -109,7 +109,7 @@ def _fetch_tencent() -> list:
     """Fetch global data from Tencent qt API."""
     import requests
     rows = []
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
     session = requests.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0"})
 
@@ -154,8 +154,22 @@ def _fetch_tencent() -> list:
     return rows
 
 
+def _receive_date(stamp: str, market: str):
+    """报价时间是交易所当地时间。美股收盘落在北京次日凌晨，日期用次日。"""
+    text = (stamp or "").strip().replace("/", "-")
+    if len(text) < 10:
+        return None
+    try:
+        session_day = datetime.strptime(text[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    if market == "US":
+        session_day = session_day + timedelta(days=1)
+    return session_day.isoformat()
+
+
 def _parse_tilde_format(val_str: str, code: str, market: str, name: str, today: str) -> dict:
-    """Parse tilde-separated format (US/HK indices)."""
+    """Parse tilde-separated format (US indices). Date comes from the quote stamp."""
     parts = val_str.split("~")
     if len(parts) < 35:
         return None
@@ -163,9 +177,12 @@ def _parse_tilde_format(val_str: str, code: str, market: str, name: str, today: 
     close = _safe_float(parts[3])
     if not close or close <= 0:
         return None
+    receive = _receive_date(parts[30] if len(parts) > 30 else "", market)
+    if not receive:
+        return None
 
     return {
-        "date": today,
+        "date": receive,
         "market": market,
         "code": code,
         "name": name,
@@ -180,13 +197,16 @@ def _parse_tilde_format(val_str: str, code: str, market: str, name: str, today: 
 
 
 def _parse_comma_format(val_str: str, code: str, market: str, name: str, today: str) -> dict:
-    """Parse comma-separated format (commodities)."""
+    """商品报价。第 0 列是正在交易的最新价，第 7 列才是上一笔结算。
+
+    07:30 最新价已经属于下一场交易。收盘只认昨结算，涨跌幅等到入库时
+    按上一笔结算来算，不用报价自带的最新价涨跌幅。
+    """
     parts = val_str.split(",")
-    if len(parts) < 5:
+    if len(parts) < 8:
         return None
 
-    # Format: close,pct,open,high,...,date,name
-    close = _safe_float(parts[0])
+    close = _safe_float(parts[7])
     if not close or close <= 0:
         return None
 
@@ -196,11 +216,9 @@ def _parse_comma_format(val_str: str, code: str, market: str, name: str, today: 
         "code": code,
         "name": parts[-1] if len(parts) > 12 else name,
         "close": close,
-        "pct": _safe_float(parts[1]) if len(parts) > 1 else None,
-        "open": _safe_float(parts[2]) if len(parts) > 2 else None,
-        "high": _safe_float(parts[4]) if len(parts) > 4 else None,
-        "low": _safe_float(parts[5]) if len(parts) > 5 else None,
+        "pct": None,
         "session": "close",
+        "settlement": True,
     }
 
 
@@ -212,7 +230,6 @@ def _fetch_eastmoney() -> list:
     """
     import requests
     rows = []
-    today = datetime.now().strftime("%Y-%m-%d")
     session = requests.Session()
     session.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -281,6 +298,16 @@ def _safe_float(val) -> float:
         return None
 
 
+def _previous_close(cur, code: str, session: str, before: str):
+    cur.execute("""
+        SELECT close FROM global_daily
+        WHERE code = %s AND session = %s AND date < %s
+        ORDER BY date DESC LIMIT 1
+    """, (code, session, before))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 def _write_to_db(conn, rows: list, source: str, today: str) -> int:
     """Write to global_daily. Returns count written."""
     if not rows:
@@ -290,6 +317,15 @@ def _write_to_db(conn, rows: list, source: str, today: str) -> int:
     with conn.cursor() as cur:
         for row in rows:
             try:
+                trade_date = row.get("date", today)
+                close = row.get("close")
+                pct = row.get("pct")
+                if row.get("settlement"):
+                    prev = _previous_close(cur, row.get("code"), row.get("session", "close"), trade_date)
+                    if prev is not None and abs(prev - close) < 0.011:
+                        continue
+                    if prev:
+                        pct = round((close - prev) / prev * 100, 4)
                 cur.execute("""
                     INSERT INTO global_daily
                         (date, market, code, name, session, open, high, low,
@@ -308,7 +344,7 @@ def _write_to_db(conn, rows: list, source: str, today: str) -> int:
                         source = EXCLUDED.source,
                         ingest_ts = now()
                 """, (
-                    row.get("date", today),
+                    trade_date,
                     row.get("market"),
                     row.get("code"),
                     row.get("name"),
@@ -316,8 +352,8 @@ def _write_to_db(conn, rows: list, source: str, today: str) -> int:
                     row.get("open"),
                     row.get("high"),
                     row.get("low"),
-                    row.get("close"),
-                    row.get("pct"),
+                    close,
+                    pct,
                     row.get("volume"),
                     row.get("amount"),
                     source,

@@ -99,7 +99,7 @@ def load_handler(job_name: str):
         return None
     try:
         mod = importlib.import_module(f"dworker.jobs.{job_name}")
-        return mod
+        return importlib.reload(mod)
     except Exception as e:
         logger.error(f"Failed to load handler {job_name}: {e}")
         return None

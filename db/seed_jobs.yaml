@@ -35,7 +35,7 @@ jobs:
     timeout_s: 600
     critical: true
     enabled: true
-    note: "隔夜全球（美/欧/外汇/商品/美债/VIX/期货）07:30保证08:00前就绪"
+    note: "隔夜全球 07:30。美股按报价时间的次日北京日期写入，报价未更新不新开一天。商品收盘=昨结算。恒生不在本作业，16:00 由 j_global_asia 写"
 
   - job_name: j_global_asia
     domain: D7

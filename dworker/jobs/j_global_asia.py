@@ -23,6 +23,11 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
         return {"success": True, "already_logged": True, "source_used": "none",
                 "rows_in": 0, "rows_written": 0, "rows_quarantined": 0, "note": note}
 
+    now = datetime.now(TZ)
+    if trade_date == now.strftime("%Y-%m-%d") and now.hour < 16:
+        return {"success": True, "source_used": "none", "rows_in": 0,
+                "rows_written": 0, "rows_quarantined": 0,
+                "note": f"SKIP: HK cash session not closed yet ({trade_date})"}
     rows = _fetch(trade_date)
     if not rows:
         return {"success": False, "source_used": "tencent", "rows_in": 0,
