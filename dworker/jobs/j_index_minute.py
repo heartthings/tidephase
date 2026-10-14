@@ -1,9 +1,12 @@
-"""六大指数 1 分钟线。腾讯 ifzq 提供 OHLC 和成交量，东财分时补成交额。
+"""六大指数 1 分钟线。腾讯 ifzq 提供 OHLC 和成交量，分钟成交额另取。
 
-定时任务只落目标交易日的分钟 bar，同时把东财最近几个交易日的分钟成交额
-回写到已经存在的分钟行上。成交量继续以腾讯为准，因为分钟量加总能对上日线。
+成交额先读新浪分钟 K，东财分时作备源。两边的额都是元，和已入库的东财额一致。
+成交量继续以腾讯为准，因为分钟量加总能对上日线。东财下午经常直接断开连接，
+所以取额要换地址重试；目标日还有空额时，这次任务不算成功。
 """
+import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -43,9 +46,15 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     written = _write(conn, rows)
     amount_days = int((job_ctx.params or {}).get("amount_days") or 5)
     amount_n = _sync_amount(conn, amount_days)
-    return {"success": written > 0, "source_used": "tencent+eastmoney",
-            "rows_in": len(rows), "rows_written": written, "rows_quarantined": 0,
-            "note": f"date={trade_date} bars={written} amount_rows={amount_n}"}
+    missing = _missing_amounts(conn, trade_date)
+    return {
+        "success": written > 0 and missing == 0,
+        "source_used": "tencent+sina",
+        "rows_in": len(rows),
+        "rows_written": written,
+        "rows_quarantined": 0,
+        "note": f"date={trade_date} bars={written} amount_rows={amount_n} amount_missing={missing}",
+    }
 
 
 def _fetch(code: str, trade_date: str) -> list:
@@ -72,36 +81,91 @@ def _fetch(code: str, trade_date: str) -> list:
 
 
 def _sync_amount(conn, ndays: int) -> int:
-    """把东财分时里的分钟成交额写回已有的 index_minute 行。"""
+    """把分钟成交额写回已有的 index_minute 行。新浪失败再试东财。"""
     total = 0
     for code, _name in INDEX_CODES:
-        try:
-            pairs = _fetch_amounts(code, ndays)
-        except Exception as e:
-            logger.warning(f"[j_index_minute] amount {code}: {e}")
-            continue
+        pairs = _fetch_amounts(code, ndays)
         if not pairs:
+            logger.warning(f"[j_index_minute] amount {code}: no rows")
             continue
-        with conn.cursor() as cur:
-            for i in range(0, len(pairs), 2000):
-                execute_values(
-                    cur,
-                    """
-                    UPDATE index_minute AS m
-                    SET amount = v.amount, ingest_ts = now()
-                    FROM (VALUES %s) AS v(code, ts, amount)
-                    WHERE m.code = v.code AND m.freq = '1m' AND m.ts = v.ts
-                    """,
-                    pairs[i:i + 2000],
-                    template="(%s, %s::timestamptz, %s::float8)",
-                    page_size=2000,
-                )
-                total += max(cur.rowcount, 0)
-        conn.commit()
+        total += _write_amounts(conn, pairs)
+        time.sleep(0.2)
+    return total
+
+
+def _write_amounts(conn, pairs: list) -> int:
+    total = 0
+    with conn.cursor() as cur:
+        for i in range(0, len(pairs), 2000):
+            execute_values(
+                cur,
+                """
+                UPDATE index_minute AS m
+                SET amount = v.amount, ingest_ts = now()
+                FROM (VALUES %s) AS v(code, ts, amount)
+                WHERE m.code = v.code AND m.freq = '1m' AND m.ts = v.ts
+                """,
+                pairs[i:i + 2000],
+                template="(%s, %s::timestamptz, %s::float8)",
+                page_size=2000,
+            )
+            total += max(cur.rowcount, 0)
+    conn.commit()
     return total
 
 
 def _fetch_amounts(code: str, ndays: int) -> list:
+    last_error = None
+    for attempt, wait in enumerate((0, 1, 3)):
+        if wait:
+            time.sleep(wait)
+        try:
+            rows = _fetch_amounts_sina(code, ndays)
+            if rows:
+                return rows
+            last_error = RuntimeError("sina returned no minute amounts")
+        except Exception as e:
+            last_error = e
+            logger.warning(f"[j_index_minute] sina amount {code} try {attempt + 1}: {e}")
+    for attempt in range(2):
+        if attempt:
+            time.sleep(2)
+        try:
+            rows = _fetch_amounts_eastmoney(code, ndays)
+            if rows:
+                return rows
+        except Exception as e:
+            last_error = e
+            logger.warning(f"[j_index_minute] eastmoney amount {code} try {attempt + 1}: {e}")
+    if last_error:
+        logger.warning(f"[j_index_minute] amount {code} gave up: {last_error}")
+    return []
+
+
+def _fetch_amounts_sina(code: str, ndays: int) -> list:
+    """新浪分钟 K。day, open, high, low, close, volume, amount。额的单位是元。"""
+    datalen = min(1200, max(300, ndays * 260))
+    resp = requests.get(
+        "https://quotes.sina.cn/cn/api/jsonp.php/var%20_=/CN_MarketDataService.getKLineData",
+        params={"symbol": code, "scale": 1, "ma": "no", "datalen": datalen},
+        headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/"},
+        timeout=20,
+    )
+    text = resp.text
+    start, end = text.find("(["), text.rfind("])")
+    if start < 0 or end < start:
+        raise RuntimeError(f"sina minute payload unusable ({resp.status_code})")
+    rows = []
+    for item in json.loads(text[start + 1:end + 1]):
+        stamp = str(item.get("day") or "")
+        amount = _num(item.get("amount"))
+        if len(stamp) < 16 or amount is None:
+            continue
+        rows.append((code, stamp[:16] + ":00+08", amount))
+    return rows
+
+
+def _fetch_amounts_eastmoney(code: str, ndays: int) -> list:
     """东财 trends2：time, 占位, close, high, low, volume, amount, avg。"""
     secid = ("1." if code.startswith("sh") else "0.") + code[2:]
     resp = requests.get(
@@ -127,6 +191,21 @@ def _fetch_amounts(code: str, ndays: int) -> list:
             continue
         rows.append((code, parts[0][:16] + ":00+08", amount))
     return rows
+
+
+def _missing_amounts(conn, trade_date: str) -> int:
+    codes = tuple(code for code, _name in INDEX_CODES)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT count(*) FROM index_minute
+            WHERE freq = '1m' AND amount IS NULL AND volume > 10000
+              AND code IN %s
+              AND (ts AT TIME ZONE 'Asia/Shanghai')::date = %s
+            """,
+            (codes, trade_date),
+        )
+        return cur.fetchone()[0]
 
 
 def _write(conn, rows: list) -> int:

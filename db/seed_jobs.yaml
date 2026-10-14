@@ -79,7 +79,7 @@ jobs:
     timeout_s: 600
     critical: false
     enabled: true
-    note: "六大指数1m。10/11/12/14/15/16点02分。腾讯分钟量，东财分钟额"
+    note: "六大指数1m。10/11/12/14/15/16点02分。腾讯分钟量，新浪分钟额，东财断开时作备源。目标日仍有空额则本次不算成功"
 
   - job_name: j_stock_daily
     domain: D2
