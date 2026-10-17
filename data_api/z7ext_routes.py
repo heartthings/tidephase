@@ -72,6 +72,19 @@ def init_auth(require_read, require_write, get_reader_conn, get_d12writer_conn):
 # 写端点
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _coerce_message_time(body: dict):
+    """HH:MM:SS 拼上冲击日期，写成上海时区。裸时间写进 timestamptz 会 500。"""
+    raw = body.get("message_time")
+    if raw is None or raw == "":
+        return None
+    text = str(raw).strip()
+    if len(text) <= 8 and text.count(":") >= 1:
+        day = str(body.get("date") or "")[:10]
+        if day:
+            return f"{day} {text}+08"
+    return text
+
+
 @router.post("/d12/impact")
 async def create_impact(request: Request):
     """冲击建档。幂等键 = impact_id。"""
@@ -111,7 +124,7 @@ async def create_impact(request: Request):
             """, (
                 impact_id, body["date"], body.get("scan_session"),
                 body["message_summary"], body.get("message_source"), body.get("message_url"),
-                body.get("message_time"),
+                _coerce_message_time(body),
                 body["message_type"], level,
                 json.dumps(body["target_topics"], ensure_ascii=False),
                 json.dumps(body["system_state_before"], ensure_ascii=False) if body.get("system_state_before") else None,
@@ -452,21 +465,29 @@ async def read_system_states(
 @router.get("/d12/prediction")
 async def read_predictions(
     result: str = None,
+    status: str = None,
+    check_date: str = None,
     start: str = None, end: str = None,
     created_start: str = None, created_end: str = None,
+    offset: int = Query(default=0, ge=0),
+    sort: str = "desc",
     limit: int = Query(default=500, le=5000),
 ):
-    """预测全量读（补 /due 只有 pending 的缺口）。"""
+    """预测全量读。status 是 result 的别名，观势按 status=pending 过滤。"""
     conn = _get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = "SELECT * FROM prediction WHERE 1=1"
         params = []
+        result = result or status
         if result:
             results = [r.strip() for r in result.split(",") if r.strip()]
             if results:
                 placeholders = ", ".join(["%s"] * len(results))
                 sql += f" AND result IN ({placeholders})"
                 params.extend(results)
+        if check_date:
+            sql += " AND check_date = %s"
+            params.append(check_date)
         if start:
             sql += " AND check_date >= %s"
             params.append(start)
@@ -479,8 +500,9 @@ async def read_predictions(
         if created_end:
             sql += " AND created_at <= %s"
             params.append(created_end)
-        sql += " ORDER BY created_at DESC LIMIT %s"
-        params.append(limit)
+        direction = "ASC" if str(sort).lower() == "asc" else "DESC"
+        sql += f" ORDER BY created_at {direction} LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
         cur.execute(sql, params)
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()

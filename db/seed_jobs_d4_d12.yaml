@@ -24,7 +24,7 @@ jobs:
     timeout_s: 900
     critical: false
     enabled: true
-    note: "个股+板块资金流向 15:20"
+    note: "个股+板块资金流 15:20。报价用新浪。五档净额用东财同一口径，列表失败则用新浪明细。板块净占比用新浪 ratioamount"
 
   # D6 板块（持续采集，lovetrade迁移提供历史）
   - job_name: j_sector_daily

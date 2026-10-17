@@ -36,6 +36,19 @@ logger = logging.getLogger("data-api")
 SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 TZ_CST = timezone(timedelta(hours=8))
 
+
+def _looks_like_timestamp(value: str) -> bool:
+    text = str(value or "")
+    return "T" in text or " " in text or text.count(":") >= 1
+
+
+def _cursor_token(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
 # ─── Config ────────────────────────────────────────────────────────────
 
 def load_secrets() -> dict:
@@ -77,7 +90,7 @@ def load_meta() -> dict:
             # Z7-ext 催化雷达三表
             "catalyst_impact", "catalyst_active_message", "catalyst_system_state",
             # Z7-ext 白名单补全
-            "radar_event", "regime_daily",
+            "radar_event", "regime_daily", "reflection",
         ],
         "no_code_tables": [
             "sector_daily", "theme_heat",
@@ -117,12 +130,20 @@ def _detect_table_sort(conn, table: str) -> dict:
         # 确定日期排序列
         if "date" in columns:
             date_col = "date"
-        elif "created_at" in columns:
-            date_col = "created_at"
-        elif "ts" in columns:
-            date_col = "ts"
+        elif "ann_date" in columns:
+            date_col = "ann_date"
+        elif "cal_date" in columns:
+            date_col = "cal_date"
+        elif "msg_ts" in columns:
+            date_col = "msg_ts"
         elif "pub_ts" in columns:
             date_col = "pub_ts"
+        elif "ts" in columns:
+            date_col = "ts"
+        elif "created_at" in columns:
+            date_col = "created_at"
+        elif "closed_at" in columns:
+            date_col = "closed_at"
         else:
             date_col = None  # fallback: 不 ORDER BY date
 
@@ -277,6 +298,9 @@ async def trade_cal(
     end: str = None,
     _=Depends(require_read)
 ):
+    # 库里的市场代码是 SSE。观势一直用默认 CN，四种参数都是 0 行。
+    if market in ("CN", "cn", "A", "a"):
+        market = "SSE"
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = "SELECT market, cal_date, is_open, prev_open_date, note FROM trade_cal WHERE market = %s"
@@ -327,6 +351,42 @@ async def instruments(
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return envelope(rows)
+
+# ─── E8b /data/market/daily-metrics（必须在 /data/{table} 之前）────────
+
+@app.get("/data/market/daily-metrics")
+async def market_daily_metrics(date: str = None, _=Depends(require_read)):
+    """当日成交额和涨跌家数。指数额来自 index_daily，全市场额是股票 amount 合计。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        if not date:
+            cur.execute("""SELECT max(date)::text FROM index_daily WHERE code = 'sh000001'""")
+            date = cur.fetchone()["max"]
+        cur.execute("""
+            SELECT code, name, close, pct, amount
+            FROM index_daily
+            WHERE date = %s AND code IN ('sh000001','sz399001','sz399006','sh000300','sh000016','sh000688')
+            ORDER BY code
+        """, (date,))
+        indexes = [dict(r) for r in cur.fetchall()]
+        cur.execute("""
+            SELECT count(*) FILTER (WHERE pct > 0)::int AS up_cnt,
+                   count(*) FILTER (WHERE pct < 0)::int AS down_cnt,
+                   count(*) FILTER (WHERE pct = 0)::int AS flat_cnt,
+                   COALESCE(sum(amount), 0) AS stock_amount
+            FROM stock_daily WHERE date = %s
+        """, (date,))
+        breadth = dict(cur.fetchone() or {})
+    conn.close()
+    return envelope({
+        "date": date,
+        "indexes": indexes,
+        "up_cnt": breadth.get("up_cnt"),
+        "down_cnt": breadth.get("down_cnt"),
+        "flat_cnt": breadth.get("flat_cnt"),
+        "stock_amount": breadth.get("stock_amount"),
+    })
+
 
 # ─── E8 /data/base_rate (必须在 E5 /data/{table} 之前，避免被通配拦截) ──
 
@@ -479,6 +539,11 @@ async def data_query(
     format: str = "json",
     _=Depends(require_read)
 ):
+    # 观势按旧名字读。表在库里，名字是催化前缀。
+    table = {
+        "system_state": "catalyst_system_state",
+        "impact": "catalyst_impact",
+    }.get(table, table)
     # 白名单校验
     if table not in META["allowed_tables"]:
         return error_response("TABLE_NOT_ALLOWED", f"Table '{table}' not in whitelist", 403)
@@ -514,12 +579,19 @@ async def data_query(
             "market_messages": "msg_ts",
         }
         if table in _ts_date_cols:
-            day_expr = f"(({_ts_date_cols[table]} AT TIME ZONE 'Asia/Shanghai')::date)"
+            col = _ts_date_cols[table]
+            day_expr = f"(({col} AT TIME ZONE 'Asia/Shanghai')::date)"
             if start:
-                sql += f" AND {day_expr} >= %s"
+                if _looks_like_timestamp(start):
+                    sql += f" AND {col} >= %s"
+                else:
+                    sql += f" AND {day_expr} >= %s"
                 params.append(start)
             if end:
-                sql += f" AND {day_expr} <= %s"
+                if _looks_like_timestamp(end):
+                    sql += f" AND {col} <= %s"
+                else:
+                    sql += f" AND {day_expr} <= %s"
                 params.append(end)
         else:
             filter_date_col = _date_col_map.get(table) or sort_info.get("date_col") or "date"
@@ -552,10 +624,11 @@ async def data_query(
         # 游标分页 (Z7c-fix: 自适应排序列)
         if cursor and sort_info.get("date_col"):
             _pk_col = sort_info["date_col"]
+            _cmp = ">" if order.lower() == "asc" else "<"
             if sort_info.get("has_code"):
-                sql += f" AND ({_pk_col}, code) < (%s, %s)"
+                sql += f" AND ({_pk_col}, COALESCE(code, '')) {_cmp} (%s, %s)"
             else:
-                sql += f" AND {_pk_col} < %s"
+                sql += f" AND {_pk_col} {_cmp} %s"
             try:
                 c_parts = cursor.split("|")
                 c_date = c_parts[0]
@@ -585,11 +658,15 @@ async def data_query(
 
     # 计算 next_cursor (Z7c-fix: 自适应排序列)
     next_cursor = None
-    if len(rows) == limit and rows:
+    date_col = sort_info.get("date_col")
+    if len(rows) == limit and rows and date_col:
         last = rows[-1]
-        _nc_date = last.get(sort_info.get("date_col") or "date", "")
-        _nc_code = last.get("code", "") if sort_info.get("has_code") else ""
-        next_cursor = f"{_nc_date}|{_nc_code}"
+        _nc_date = _cursor_token(last.get(date_col))
+        if _nc_date:
+            if sort_info.get("has_code"):
+                next_cursor = f"{_nc_date}|{_cursor_token(last.get('code'))}"
+            else:
+                next_cursor = _nc_date
 
     if format == "csv":
         import csv
@@ -845,8 +922,9 @@ async def create_prediction(
         cur.execute("""
             INSERT INTO prediction (prediction_id, statement, category, confidence_pct,
                                     base_rate_ref, conditions, falsify, check_date,
-                                    regime_at_create, horizon, result, actor, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    regime_at_create, horizon, result, actor, source,
+                                    reasoning_trace, alternatives)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             pid, body["statement"], body["category"], conf,
             body.get("base_rate_ref"),
@@ -858,6 +936,8 @@ async def create_prediction(
             body.get("result", "pending"),
             body.get("actor", "guanshi"),
             body.get("source", "guanshi"),
+            json.dumps(body["reasoning_trace"], ensure_ascii=False) if body.get("reasoning_trace") is not None else None,
+            json.dumps(body["alternatives"], ensure_ascii=False) if body.get("alternatives") is not None else None,
         ))
     conn.commit()
     conn.close()
@@ -866,8 +946,34 @@ async def create_prediction(
 
 REGIME_VALUES = {
     "stable", "oscillation", "critical", "transition",
-    "trending_up", "trending_down", "news_shock",
+    "trending_up", "trending_down", "news_shock", "ice_point",
 }
+
+
+@app.get("/d12/regime_daily")
+async def read_regime_daily(
+    start: str = None,
+    end: str = None,
+    limit: int = Query(default=30, le=500),
+    _=Depends(require_read),
+):
+    """相态读。与 /data/regime_daily 同一张表。"""
+    conn = get_reader_conn()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        sql = "SELECT * FROM regime_daily WHERE 1=1"
+        params = []
+        if start:
+            sql += " AND date >= %s"
+            params.append(start)
+        if end:
+            sql += " AND date <= %s"
+            params.append(end)
+        sql += " ORDER BY date DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return envelope(rows)
 
 
 @app.post("/d12/regime_daily")

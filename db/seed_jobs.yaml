@@ -145,7 +145,7 @@ jobs:
     timeout_s: 3600
     critical: false
     enabled: true
-    note: "全市场个股1m 15:45。沪深腾讯mkline最近400根；北交所mkline无分钟K，走分时。定时只落当天"
+    note: "全市场个股1m 15:45。沪深腾讯分钟价量，分时补成交额（元）和分时均价。北交所走分时。定时只落当天，额不足八成则本次不算成功"
 
   - job_name: j_verify_daily
     domain: pipeline
@@ -214,6 +214,17 @@ jobs:
     critical: false
     enabled: true
     note: "题材库增量同步 08:00（爬取+AI解释+飞书推送）"
+
+  - job_name: j_stock_concept
+    domain: D6
+    target_tables: [stock_sector_map]
+    schedule_cron: "20 8 * * 1-5"
+    source_chain: ["longhu", "eastmoney"]
+    retry_policy: {"tries": 2, "backoff_s": [30, 120]}
+    timeout_s: 3600
+    critical: false
+    enabled: true
+    note: "个股题材与行业 08:20。龙虎题材全量刷新。行业优先东财，断开时用新浪行业。没取到的股票不改旧记录"
 
   - job_name: j_radar
     domain: D8

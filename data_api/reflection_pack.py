@@ -15,7 +15,20 @@ from typing import Any, Optional
 import psycopg2
 import psycopg2.extras
 
-logger = logging.getLogger("data-api.reflection_pack")
+def _scalar(row):
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return next(iter(row.values()), None)
+    return row[0]
+
+
+def _sector_kind_sql() -> str:
+    """库里板块 kind 实际是 concept。有行业行时优先用行业。"""
+    return """kind = COALESCE(
+        (SELECT s.kind FROM sector_daily s WHERE s.date = %s AND s.kind IN ('行业', 'industry') LIMIT 1),
+        'concept'
+    )"""
 
 TZ_CST = timezone(timedelta(hours=8))
 
@@ -286,30 +299,30 @@ def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, 
 
     # ③ sector 集中度
     try:
-        cur.execute("""
+        cur.execute(f"""
             SELECT sector_name, pct, main_net_inflow, turnover
             FROM sector_daily
-            WHERE date = %s AND kind = '行业'
+            WHERE date = %s AND {_sector_kind_sql()}
             ORDER BY main_net_inflow DESC NULLS LAST
             LIMIT 10
-        """, (nearest,))
+        """, (nearest, nearest))
         top_inflow = [dict(r) for r in cur.fetchall()]
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT sector_name, pct, main_net_inflow, turnover
             FROM sector_daily
-            WHERE date = %s AND kind = '行业'
+            WHERE date = %s AND {_sector_kind_sql()}
             ORDER BY pct DESC NULLS LAST
             LIMIT 10
-        """, (nearest,))
+        """, (nearest, nearest))
         top_pct = [dict(r) for r in cur.fetchall()]
 
         # top5 成交额占比 + HHI
-        cur.execute("""
+        cur.execute(f"""
             SELECT turnover FROM sector_daily
-            WHERE date = %s AND kind = '行业' AND turnover IS NOT NULL
+            WHERE date = %s AND {_sector_kind_sql()} AND turnover IS NOT NULL
             ORDER BY turnover DESC
-        """, (nearest,))
+        """, (nearest, nearest))
         rows = cur.fetchall()
         turnovers = [r["turnover"] if isinstance(r, dict) else r[0] for r in rows]
         total_to = sum(turnovers) if turnovers else 0
@@ -328,7 +341,7 @@ def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, 
         }
         if not top_inflow:
             gaps.append({"section": "S1", "code": "SECTOR_DAILY_EMPTY",
-                          "reason": f"No sector_daily for date={nearest} kind='行业'", "affected": "S1.sector"})
+                          "reason": f"No sector_daily for date={nearest}", "affected": "S1.sector"})
     except Exception as e:
         gaps.append({"section": "S1", "code": "SECTOR_ERROR", "reason": str(e), "affected": "S1.sector"})
         result["sector_concentration"] = {}
@@ -340,25 +353,25 @@ def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, 
             WHERE code = 'sh000001' AND date = %s
         """, (nearest,))
         row = cur.fetchone()
-        today_amount = row[0] if row else None
+        today_amount = _scalar(row)
 
         cur.execute("""
             SELECT AVG(amount) FROM index_daily
             WHERE code = 'sh000001' AND date BETWEEN %s AND %s
         """, (window_start, nearest))
-        avg_amount = cur.fetchone()[0]
+        avg_amount = _scalar(cur.fetchone())
 
         # 全市场量能
         cur.execute("""
             SELECT SUM(amount) FROM stock_daily WHERE date = %s
         """, (nearest,))
-        mkt_today = cur.fetchone()[0]
+        mkt_today = _scalar(cur.fetchone())
 
         cur.execute("""
             SELECT SUM(amount) FROM stock_daily
             WHERE date BETWEEN %s AND %s
         """, (window_start, nearest))
-        mkt_total = cur.fetchone()[0]
+        mkt_total = _scalar(cur.fetchone())
 
         # B5: 安全计算 5d avg（避免 idx_before < 0 时 KeyError）
         if idx_before >= 0:

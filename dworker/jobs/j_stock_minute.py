@@ -1,9 +1,13 @@
 """全市场个股 1 分钟线。
 
-沪深：腾讯 mkline，最近 400 根（约一个半交易日）。
-北交所：mkline 没有分钟 K，用分时（只有现价和成交量，当天）。
+沪深：腾讯 mkline，最近 400 根（约一个半交易日），价和量。
+成交额、分时均价来自新浪分钟 K。额是这一分钟的成交额，单位元。
+均价是当日起从 09:30 累计的成交额 / 累计成交股数。采集机上腾讯分时被拦，不用。
+北交所没有分钟 K，用腾讯分时；有累计额时同样落额和均价。
 定时任务只落目标交易日。手工触发不带 date 时，把这次返回里的交易日都落上。
+补历史额用新浪分钟 K（成交量仍以腾讯的手为准，不覆盖）。
 """
+import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -42,6 +46,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
                 "rows_written": 0, "rows_quarantined": 0, "note": "MISS: no active stocks"}
 
     written = 0
+    amount_rows = 0
     empty = 0
     errors = 0
     dates = set()
@@ -52,12 +57,13 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
         empty += batch_empty
         errors += batch_errors
         dates |= batch_dates
+        amount_rows += sum(1 for row in rows if row[7] is not None)
         if rows and not sample:
             sample = rows[:20]
         written += _write(conn, rows)
         logger.info(
             f"[j_stock_minute] {min(i + BATCH, len(codes))}/{len(codes)} "
-            f"written={written} empty={empty} errors={errors}"
+            f"written={written} amount={amount_rows} empty={empty} errors={errors}"
         )
 
     if sample:
@@ -68,10 +74,15 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
 
     note = (
         f"date={keep_date or 'window'} codes={len(codes)} bars={written} "
-        f"empty={empty} errors={errors} days={','.join(sorted(dates)) or '-'}"
+        f"amount={amount_rows} empty={empty} errors={errors} "
+        f"days={','.join(sorted(dates)) or '-'}"
     )
     covered = len(codes) - errors
-    return {"success": written > 0 and errors < covered, "source_used": "tencent",
+    amount_ok = True
+    if keep_date and written > 1000 and amount_rows < int(written * 0.8):
+        amount_ok = False
+        note += " amount coverage below 80%"
+    return {"success": written > 0 and errors < covered and amount_ok, "source_used": "tencent",
             "rows_in": written, "rows_written": written, "rows_quarantined": 0, "note": note}
 
 
@@ -118,7 +129,7 @@ def _fetch(code: str, keep_date):
             if code.startswith("bj"):
                 rows = _fetch_trend(code, keep_date)
             else:
-                rows = _fetch_mkline(code, keep_date)
+                rows = _apply_amounts(_fetch_mkline(code, keep_date), _fetch_trend_amounts(code, keep_date))
             return rows, True, {r[0][0:10] for r in rows}
         except Exception as e:
             last = e
@@ -148,8 +159,59 @@ def _fetch_mkline(code: str, keep_date) -> list:
     return rows
 
 
+def _fetch_trend_amounts(code: str, keep_date):
+    """新浪分钟 K。键是分钟时间，值是（这一分钟成交额元，累计均价元）。"""
+    datalen = 320 if keep_date else 500
+    rows, ok = _sina_amount_rows(code, datalen)
+    if not ok:
+        return {}
+    out = {}
+    for ts, _code, amount, avg in rows:
+        if keep_date and not ts.startswith(keep_date):
+            continue
+        out[ts] = (amount, avg)
+    return out
+
+
+def _amounts_from_trend(node: dict, keep_date) -> dict:
+    day_raw = str(node.get("date") or "")
+    if len(day_raw) != 8:
+        return {}
+    day = f"{day_raw[0:4]}-{day_raw[4:6]}-{day_raw[6:8]}"
+    if keep_date and day != keep_date:
+        return {}
+    prev_amt = None
+    out = {}
+    for item in node.get("data") or []:
+        parts = str(item).split()
+        if len(parts) < 4 or len(parts[0]) < 4:
+            continue
+        cum_vol = _num(parts[2])
+        cum_amt = _num(parts[3])
+        if cum_amt is None:
+            continue
+        if prev_amt is None or cum_amt < prev_amt:
+            amount = cum_amt
+        else:
+            amount = cum_amt - prev_amt
+        prev_amt = cum_amt
+        avg = cum_amt / (cum_vol * 100) if cum_vol else None
+        hhmm = parts[0]
+        ts = f"{day} {hhmm[0:2]}:{hhmm[2:4]}:00+08"
+        out[ts] = (amount, avg)
+    return out
+
+
+def _apply_amounts(rows: list, amounts: dict) -> list:
+    applied = []
+    for ts, code, price, open_, high, low, vol in rows:
+        amount, avg = amounts.get(ts, (None, None))
+        applied.append((ts, code, price, open_, high, low, vol, amount, avg))
+    return applied
+
+
 def _fetch_trend(code: str, keep_date) -> list:
-    """北交所分时。每根只有现价和累计成交量，开高低用现价。"""
+    """北交所分时。开高低用现价。有累计额时同时落这一分钟的额和均价。"""
     url = f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={code}"
     resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"}, timeout=20)
     node = ((resp.json().get("data") or {}).get(code) or {}).get("data") or {}
@@ -159,6 +221,7 @@ def _fetch_trend(code: str, keep_date) -> list:
     day = f"{day_raw[0:4]}-{day_raw[4:6]}-{day_raw[6:8]}"
     if keep_date and day != keep_date:
         return []
+    amounts = _amounts_from_trend(node, keep_date)
     prev = None
     rows = []
     for item in node.get("data") or []:
@@ -175,7 +238,8 @@ def _fetch_trend(code: str, keep_date) -> list:
         if cum is not None:
             prev = cum
         ts = f"{day} {hhmm[0:2]}:{hhmm[2:4]}:00+08"
-        rows.append((ts, code, price, price, price, price, vol))
+        amount, avg = amounts.get(ts, (None, None))
+        rows.append((ts, code, price, price, price, price, vol, amount, avg))
     return rows
 
 
@@ -183,16 +247,113 @@ def _write(conn, rows: list) -> int:
     if not rows:
         return 0
     sql = """
-        INSERT INTO stock_minute (ts, code, freq, price, open, high, low, vol, source)
+        INSERT INTO stock_minute (ts, code, freq, price, open, high, low, vol, amount, avg_price, source)
         VALUES %s
         ON CONFLICT (ts, code, freq) DO UPDATE SET
             price=EXCLUDED.price, open=EXCLUDED.open, high=EXCLUDED.high,
-            low=EXCLUDED.low, vol=EXCLUDED.vol, ingest_ts=now()
+            low=EXCLUDED.low, vol=EXCLUDED.vol,
+            amount=COALESCE(EXCLUDED.amount, stock_minute.amount),
+            avg_price=COALESCE(EXCLUDED.avg_price, stock_minute.avg_price),
+            ingest_ts=now()
     """
     with conn.cursor() as cur:
         execute_values(
             cur, sql, rows,
-            template="(%s,%s,'1m',%s,%s,%s,%s,%s,'tencent')",
+            template="(%s,%s,'1m',%s,%s,%s,%s,%s,%s,%s,'tencent')",
+            page_size=2000,
+        )
+    conn.commit()
+    return len(rows)
+
+
+def backfill_amount(conn, datalen=1600) -> dict:
+    """新浪分钟 K 补已落库 bars 的成交额和分时均价。不改 vol。"""
+    codes = _load_codes(conn)
+    written = 0
+    empty = 0
+    errors = 0
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for i, (rows, ok) in enumerate(pool.map(lambda c: _sina_amount_rows(c, datalen), codes), start=1):
+            if not ok:
+                errors += 1
+            elif not rows:
+                empty += 1
+            else:
+                written += _update_amounts(conn, rows)
+            if i % 200 == 0 or i == len(codes):
+                logger.info(
+                    f"[j_stock_minute] backfill {i}/{len(codes)} "
+                    f"updated={written} empty={empty} errors={errors}"
+                )
+                print(
+                    f"[j_stock_minute] backfill {i}/{len(codes)} "
+                    f"updated={written} empty={empty} errors={errors}",
+                    flush=True,
+                )
+    return {"codes": len(codes), "updated": written, "empty": empty, "errors": errors}
+
+
+def _sina_amount_rows(code: str, datalen: int):
+    last = None
+    for attempt in range(2):
+        try:
+            resp = requests.get(
+                "https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_x=/CN_MarketDataService.getKLineData",
+                params={"symbol": code, "scale": 1, "ma": "no", "datalen": datalen},
+                headers={"User-Agent": "Mozilla/5.0", "Referer": "https://quotes.sina.cn/"},
+                timeout=20,
+            )
+            text = resp.text
+            start, end = text.find("(["), text.rfind("])")
+            if start < 0 or end < start:
+                raise RuntimeError(f"sina minute payload unusable ({resp.status_code})")
+            bars = json.loads(text[start + 1:end + 1])
+            return _cumulative_avg(code, bars), True
+        except Exception as e:
+            last = e
+            time.sleep(0.4)
+    logger.warning(f"[j_stock_minute] sina amount {code}: {last}")
+    return [], False
+
+
+def _cumulative_avg(code: str, bars: list) -> list:
+    """新浪 volume 是股。均价按每个交易日从 09:30 累计；窗口切在半路的那天不写均价。"""
+    grouped = {}
+    for item in bars:
+        stamp = str(item.get("day") or "")
+        amount = _num(item.get("amount"))
+        if len(stamp) < 16 or amount is None:
+            continue
+        grouped.setdefault(stamp[:10], []).append((stamp, amount, _num(item.get("volume")) or 0.0))
+    rows = []
+    for day in sorted(grouped):
+        items = sorted(grouped[day])
+        full = items[0][0][11:16] <= "09:31"
+        cum_amt = 0.0
+        cum_vol = 0.0
+        for stamp, amount, volume in items:
+            cum_amt += amount
+            cum_vol += volume
+            avg = cum_amt / cum_vol if full and cum_vol else None
+            rows.append((stamp[:16] + ":00+08", code, amount, avg))
+    return rows
+
+
+def _update_amounts(conn, rows: list) -> int:
+    if not rows:
+        return 0
+    sql = """
+        UPDATE stock_minute AS m SET
+            amount = v.amount,
+            avg_price = COALESCE(v.avg_price, m.avg_price),
+            ingest_ts = now()
+        FROM (VALUES %s) AS v(ts, code, amount, avg_price)
+        WHERE m.ts = v.ts AND m.code = v.code AND m.freq = '1m'
+    """
+    with conn.cursor() as cur:
+        execute_values(
+            cur, sql, rows,
+            template="(%s::timestamptz,%s,%s::float8,%s::float8)",
             page_size=2000,
         )
     conn.commit()

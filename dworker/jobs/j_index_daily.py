@@ -31,6 +31,13 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     t0 = time.time()
     today = datetime.now().strftime("%Y-%m-%d")
 
+    try:
+        filled = fill_index_amounts(conn)
+        if filled:
+            logger.info(f"[j_index_daily] filled zero amounts: {filled}")
+    except Exception as e:
+        logger.warning(f"[j_index_daily] amount fill failed: {e}")
+
     # ── 日历门禁：休市/非交易日不写业务表 ──
     gate = check_trade_gate(conn, market="SSE", check_date=today)
     if not gate["allowed"]:
@@ -156,7 +163,7 @@ def _fetch_tencent() -> list:
                             "high": float(item[3]),
                             "low": float(item[4]),
                             "volume": float(item[5]) if len(item) > 5 else 0,
-                            "amount": 0,
+                            "amount": None,
                             "pct": pct,
                         })
                         prev_close = close
@@ -313,6 +320,50 @@ def _fetch_eastmoney() -> list:
     return rows
 
 
+def fill_index_amounts(conn, bars: int = 30) -> int:
+    """东财日 K 第 7 列是成交额。腾讯日 K 没有这一列，之前落成 0。只补 0 和空值。"""
+    import requests
+    updated = 0
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    with conn.cursor() as cur:
+        for code, _name in INDEX_CODES:
+            secid = ("1." if code.startswith("sh") else "0.") + code[2:]
+            try:
+                resp = session.get(
+                    "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+                    params={
+                        "secid": secid, "klt": 101, "fqt": 1, "lmt": bars,
+                        "end": "20500101",
+                        "fields1": "f1,f2,f3,f4,f5,f6",
+                        "fields2": "f51,f52,f53,f54,f55,f56,f57",
+                    },
+                    timeout=15,
+                )
+                klines = ((resp.json().get("data") or {}).get("klines")) or []
+            except Exception as e:
+                logger.warning(f"[j_index_daily] amount {code}: {e}")
+                continue
+            for line in klines:
+                parts = line.split(",")
+                if len(parts) < 7:
+                    continue
+                try:
+                    amount = float(parts[6])
+                except ValueError:
+                    continue
+                if amount <= 0:
+                    continue
+                cur.execute("""
+                    UPDATE index_daily
+                    SET amount = %s, ingest_ts = now()
+                    WHERE code = %s AND date = %s AND (amount IS NULL OR amount = 0)
+                """, (amount, code, parts[0][:10]))
+                updated += cur.rowcount
+    conn.commit()
+    return updated
+
+
 def _write_to_db(conn, rows: list, source: str) -> int:
     """Write rows to index_daily table. Returns count written."""
     if not rows:
@@ -334,7 +385,7 @@ def _write_to_db(conn, rows: list, source: str) -> int:
                         close = EXCLUDED.close,
                         pct = EXCLUDED.pct,
                         volume = EXCLUDED.volume,
-                        amount = EXCLUDED.amount,
+                        amount = COALESCE(NULLIF(EXCLUDED.amount, 0), index_daily.amount),
                         source = EXCLUDED.source,
                         ingest_ts = now()
                 """, (
