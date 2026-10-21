@@ -264,26 +264,28 @@ def run_scheduler():
             # Heartbeat handled separately
             continue
 
-        cron_kwargs = parse_cron_expression(cron_expr)
-        if cron_kwargs is None:
-            logger.warning(f"⚠️ Cannot parse cron for {job_name}: {cron_expr}")
-            continue
-
-        try:
-            trigger = CronTrigger(**cron_kwargs, timezone="Asia/Shanghai")
-            scheduler.add_job(
-                job_dispatch,
-                trigger=trigger,
-                args=[job_name],
-                id=job_name,
-                name=job_name,
-                misfire_grace_time=3600,  # 1 hour grace period
-                coalesce=True,  # Merge missed runs into one
-            )
-            registered += 1
-            logger.info(f"📅 Registered: {job_name} cron={cron_expr}")
-        except Exception as e:
-            logger.error(f"❌ Failed to register {job_name}: {e}")
+        expressions = [part.strip() for part in cron_expr.split(";") if part.strip()]
+        for index, expression in enumerate(expressions):
+            cron_kwargs = parse_cron_expression(expression)
+            if cron_kwargs is None:
+                logger.warning(f"⚠️ Cannot parse cron for {job_name}: {expression}")
+                continue
+            job_id = job_name if index == 0 else f"{job_name}#{index + 1}"
+            try:
+                trigger = CronTrigger(**cron_kwargs, timezone="Asia/Shanghai")
+                scheduler.add_job(
+                    job_dispatch,
+                    trigger=trigger,
+                    args=[job_name],
+                    id=job_id,
+                    name=job_name,
+                    misfire_grace_time=3600,  # 1 hour grace period
+                    coalesce=True,  # Merge missed runs into one
+                )
+                registered += 1
+                logger.info(f"📅 Registered: {job_id} cron={expression}")
+            except Exception as e:
+                logger.error(f"❌ Failed to register {job_name}: {e}")
 
     # Heartbeat job (every 15 min)
     scheduler.add_job(

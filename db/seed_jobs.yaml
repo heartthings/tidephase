@@ -73,13 +73,13 @@ jobs:
   - job_name: j_index_minute
     domain: D1
     target_tables: [index_minute]
-    schedule_cron: "2 10-12,14-16 * * 1-5"
+    schedule_cron: "2 10-12,14-16 * * 1-5;32 11 * * 1-5"
     source_chain: ["tencent", "eastmoney"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 600
     critical: false
     enabled: true
-    note: "六大指数1m。10/11/12/14/15/16点02分。腾讯分钟量，新浪分钟额，东财断开时作备源。目标日仍有空额则本次不算成功"
+    note: "六大指数1m。10/11/12/14/15/16点02分，上午收盘后再于11:32补上11:00–11:30。腾讯分钟量，新浪分钟额，东财断开时作备源。目标日仍有空额则本次不算成功"
 
   - job_name: j_stock_daily
     domain: D2
@@ -139,13 +139,13 @@ jobs:
   - job_name: j_stock_minute
     domain: D2
     target_tables: [stock_minute]
-    schedule_cron: "45 15 * * 1-5"
-    source_chain: ["tencent"]
+    schedule_cron: "35 11 * * 1-5;45 15 * * 1-5"
+    source_chain: ["tencent", "sina"]
     retry_policy: {"tries": 3, "backoff_s": [5, 30, 120]}
     timeout_s: 3600
     critical: false
     enabled: true
-    note: "全市场个股1m 15:45。沪深腾讯分钟价量，分时补成交额（元）和分时均价。北交所走分时。定时只落当天，额不足八成则本次不算成功"
+    note: "全市场个股1m。11:35拉上午，15:45收盘后补全天。沪深腾讯分钟价量，新浪补成交额（元）和分时均价。北交所走分时。定时只落当天，额不足八成则本次不算成功"
 
   - job_name: j_verify_daily
     domain: pipeline

@@ -1,0 +1,323 @@
+{
+  "uid": "cognition-board",
+  "title": "基础认知看板",
+  "description": "按 2026-10-16 录入的 F-011 到 F-023：题材是舞台，情绪是推力。",
+  "tags": ["market", "cognition"],
+  "timezone": "Asia/Shanghai",
+  "schemaVersion": 39,
+  "refresh": "5m",
+  "time": {"from": "now-120d", "to": "now"},
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "**市场就是题材加情绪（F-011）。** 题材是舞台，情绪是推力。主线要能带动大盘（F-021），来源看想象力、新故事、可信消息、能不能带动全球（F-022）。调整结束会再次点燃，高情绪是对这条主线的正向反馈（F-023），不是利空打过之后的反弹（F-016，那种不能格局）。\n\n冰点问舞台还在不在，火热问这股推力还值不值得等（F-018）。宽标签（国有企业、人工智能）人数多不等于情绪成立，要看涨停原因原文是不是同一件事。仓位水位（F-019）不在库里，看板不编。"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "最近涨停日",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 4},
+      "targets": [{"refId": "A", "format": "table", "rawSql": "SELECT max(date)::text AS \"日期\" FROM zt_pool", "editorMode": "code"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "auto", "textMode": "value", "colorMode": "none", "graphMode": "none", "justifyMode": "auto"},
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "上证涨跌% · 主线能不能带动大盘",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 4, "w": 5, "x": 4, "y": 4},
+      "targets": [{"refId": "A", "format": "table", "rawSql": "SELECT round(pct::numeric, 2) AS \"涨跌%\" FROM index_daily WHERE code='sh000001' ORDER BY date DESC LIMIT 1", "editorMode": "code"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "auto", "textMode": "value", "colorMode": "value", "graphMode": "none", "justifyMode": "auto"},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0}]}}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "涨停家数 · 推力",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 4, "w": 3, "x": 9, "y": 4},
+      "targets": [{"refId": "A", "format": "table", "rawSql": "SELECT count(*)::int AS \"家数\" FROM zt_pool WHERE date=(SELECT max(date) FROM zt_pool)", "editorMode": "code"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "auto", "textMode": "value", "colorMode": "none", "graphMode": "none", "justifyMode": "auto"},
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "炸板家数 · 分歧",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 4, "w": 3, "x": 12, "y": 4},
+      "targets": [{"refId": "A", "format": "table", "rawSql": "SELECT count(*)::int AS \"家数\" FROM zb_pool WHERE date=(SELECT max(date) FROM zt_pool)", "editorMode": "code"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "auto", "textMode": "value", "colorMode": "none", "graphMode": "none", "justifyMode": "auto"},
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "最高连板",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 4, "w": 3, "x": 15, "y": 4},
+      "targets": [{"refId": "A", "format": "table", "rawSql": "SELECT max(board_days)::int AS \"板\" FROM zt_pool WHERE date=(SELECT max(date) FROM zt_pool)", "editorMode": "code"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "auto", "textMode": "value", "colorMode": "none", "graphMode": "none", "justifyMode": "auto"},
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "打板成功率% / 溢价%",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 4},
+      "targets": [{"refId": "A", "format": "table", "rawSql": "SELECT dbcgl AS \"成功率%\", dbyll AS \"溢价%\" FROM sentiment_daily ORDER BY date DESC LIMIT 1", "editorMode": "code"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "none", "graphMode": "none", "justifyMode": "auto"},
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "一、舞台：哪些题材在聚集、启动、发酵、高潮、分歧、退潮",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 8}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "龙虎题材阶段（801，已打开的映射。高度：不到 3 板是聚集未完成，破 3 板是启动，4 到 5 板是发酵，破 6 板是高潮）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 12, "w": 14, "x": 0, "y": 9},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "WITH latest AS (SELECT max(date) AS d FROM zt_pool),\nprev AS (\n  SELECT max(cal_date) AS d FROM trade_cal, latest\n  WHERE market='SSE' AND is_open=1 AND cal_date < latest.d\n),\nzt AS (\n  SELECT m.sector_name,\n         count(DISTINCT z.code) FILTER (WHERE z.date = latest.d) AS zt_today,\n         max(z.board_days) FILTER (WHERE z.date = latest.d) AS height,\n         count(DISTINCT z.code) FILTER (WHERE z.date = prev.d) AS zt_prev\n  FROM stock_sector_map m\n  CROSS JOIN latest\n  CROSS JOIN prev\n  JOIN zt_pool z ON z.code = m.code AND z.date IN (latest.d, prev.d)\n  WHERE m.kind='theme' AND m.effective_to IS NULL AND m.sector_code ~ '^801'\n  GROUP BY m.sector_name\n)\nSELECT sector_name AS \"题材\",\n       zt_today AS \"今日涨停\",\n       zt_prev AS \"昨日涨停\",\n       height AS \"最高板\",\n       CASE\n         WHEN height >= 6 THEN '高潮'\n         WHEN height BETWEEN 4 AND 5 THEN '发酵'\n         WHEN height >= 3 AND zt_today >= COALESCE(zt_prev, 0) THEN '启动'\n         WHEN zt_today > COALESCE(zt_prev, 0) AND COALESCE(height, 0) < 3 THEN '聚集未完成'\n         WHEN zt_today < COALESCE(zt_prev, 0) AND COALESCE(height, 0) >= 3 THEN '分歧'\n         WHEN zt_today < COALESCE(zt_prev, 0) THEN '退潮'\n         ELSE '观察'\n       END AS \"阶段\"\nFROM zt\nWHERE zt_today >= 3 OR COALESCE(height, 0) >= 3\nORDER BY zt_today DESC, height DESC NULLS LAST\nLIMIT 25"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "行业涨停（和题材分开。同名行业不等于同一舞台）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 12, "w": 10, "x": 14, "y": 9},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "WITH latest AS (SELECT max(date) AS d FROM zt_pool)\nSELECT m.sector_name AS \"行业\",\n       count(DISTINCT z.code) AS \"今日涨停\",\n       max(z.board_days) AS \"最高板\"\nFROM stock_sector_map m\nCROSS JOIN latest\nJOIN zt_pool z ON z.code = m.code AND z.date = latest.d\nWHERE m.kind='industry' AND m.effective_to IS NULL\nGROUP BY m.sector_name\nHAVING count(DISTINCT z.code) >= 2\nORDER BY count(DISTINCT z.code) DESC, max(z.board_days) DESC NULLS LAST\nLIMIT 20"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "二、核对舞台：原因原文是不是同一件事",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 21}
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "当日涨停原因原文（按连板高度。口袋标签要看第一句是不是这件事）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 12, "w": 16, "x": 0, "y": 22},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT code AS \"代码\", name AS \"名称\", board_days AS \"连板\",\n       left(coalesce(theme, reason, ''), 80) AS \"原因原文\", industry AS \"行业\"\nFROM zt_pool\nWHERE date=(SELECT max(date) FROM zt_pool)\nORDER BY board_days DESC NULLS LAST, code\nLIMIT 30"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "炸板（分歧：高度还在但封不住）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 12, "w": 8, "x": 16, "y": 22},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT code AS \"代码\", name AS \"名称\", board_days AS \"连板\", break_times AS \"开板次数\", industry AS \"行业\"\nFROM zb_pool\nWHERE date=(SELECT max(date) FROM zt_pool)\nORDER BY board_days DESC NULLS LAST, break_times DESC NULLS LAST\nLIMIT 20"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "三、推力：钱往哪里去，火热还值不值得等",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34}
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "题材主力净流入前 12（亿元。正数是还在进）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 35},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT m.sector_name AS \"题材\",\n       round((sum(f.main_net_inflow)/1e8)::numeric, 2) AS \"净流入亿元\",\n       count(DISTINCT f.code) AS \"有资金流的成分股\"\nFROM stock_sector_map m\nJOIN fund_flow_stock f ON f.code = m.code\nWHERE m.kind='theme' AND m.effective_to IS NULL AND m.sector_code ~ '^801'\n  AND f.date = (SELECT max(date) FROM fund_flow_stock)\nGROUP BY m.sector_name\nORDER BY sum(f.main_net_inflow) DESC NULLS LAST\nLIMIT 12"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "题材主力净流出前 12（推力在撤）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 35},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT m.sector_name AS \"题材\",\n       round((sum(f.main_net_inflow)/1e8)::numeric, 2) AS \"净流入亿元\"\nFROM stock_sector_map m\nJOIN fund_flow_stock f ON f.code = m.code\nWHERE m.kind='theme' AND m.effective_to IS NULL AND m.sector_code ~ '^801'\n  AND f.date = (SELECT max(date) FROM fund_flow_stock)\nGROUP BY m.sector_name\nORDER BY sum(f.main_net_inflow) ASC NULLS LAST\nLIMIT 12"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "四、路径：恐慌后的点燃、途中微调、利空后的反弹、大跌后的山形",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 45}
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "上证收盘（看是单边上行、干脆反弹，还是上上下下的山形）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 8, "w": 14, "x": 0, "y": 46},
+      "targets": [{
+        "refId": "A",
+        "format": "time_series",
+        "editorMode": "code",
+        "rawSql": "SELECT date::timestamp AS time, close AS \"上证\"\nFROM index_daily\nWHERE code='sh000001' AND date >= CURRENT_DATE - 80\nORDER BY date"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}}
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "上证近 10 日：涨跌、成交额（亿元）、涨停家数",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 8, "w": 10, "x": 14, "y": 46},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT i.date AS \"日期\",\n       round(i.pct::numeric, 2) AS \"涨跌%\",\n       round((i.amount/1e8)::numeric, 0) AS \"成交额亿元\",\n       (SELECT count(*) FROM zt_pool z WHERE z.date=i.date) AS \"涨停\",\n       (SELECT count(*) FROM zb_pool b WHERE b.date=i.date) AS \"炸板\"\nFROM index_daily i\nWHERE i.code='sh000001'\nORDER BY i.date DESC\nLIMIT 10"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": false}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 20,
+      "type": "text",
+      "title": "这张路径怎么读",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 54},
+      "options": {
+        "mode": "markdown",
+        "content": "- **F-012** 先跌出恐慌再加速，积压的情绪放开之后能持续一阵。看的是大跌日放量，后面缩量再拉起来。\n- **F-013 / F-014** 加速上涨途中的回撤，要同时还有舞台、还没有利空，才是微调。微调后续涨，参与窗口变短。\n- **F-015 / F-016** 下跌已经开始，再来一条外部利空，情绪会从犹豫走到一致看空。之后的反弹可以很干脆，但不能格局。\n- **F-017** 大跌之后上上下下是敏感期的山形，不是新主升。新舞台要同时更有想象力，而且推力够；舞台差就只是占位。"
+      }
+    },
+    {
+      "id": 21,
+      "type": "row",
+      "title": "五、外部：全球共舞，还是外部利空",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 60}
+    },
+    {
+      "id": 22,
+      "type": "table",
+      "title": "最近一个外盘日的涨跌（日经、韩国如果源对不上，不要拿来当前提）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 8, "w": 10, "x": 0, "y": 61},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT date AS \"日期\", code AS \"代码\", name AS \"名称\", round(close::numeric, 2) AS \"收盘\", round(pct::numeric, 2) AS \"涨跌%\"\nFROM global_daily\nWHERE date=(SELECT max(date) FROM global_daily)\nORDER BY code"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "当日快讯（只复述盘面的是结果，不是原因）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 8, "w": 14, "x": 10, "y": 61},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT to_char(msg_ts AT TIME ZONE 'Asia/Shanghai', 'HH24:MI') AS \"时间\", left(title, 72) AS \"标题\"\nFROM market_messages\nWHERE (msg_ts AT TIME ZONE 'Asia/Shanghai')::date = (SELECT max(date) FROM zt_pool)\nORDER BY msg_ts DESC\nLIMIT 18"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "六、库里的基础认知。上面的分档跟着这些陈述走",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 69}
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "2026-10-16 录入的宪法层（取每个编号的最新版本）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 12, "w": 16, "x": 0, "y": 70},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT cognition_id AS \"编号\", version AS \"版本\", title AS \"标题\",\n       left(split_part(statement, E'\\n', 1), 96) AS \"陈述首句\"\nFROM (\n  SELECT DISTINCT ON (cognition_id) cognition_id, version, title, statement\n  FROM cognition\n  WHERE type='constitution' AND status='active'\n    AND cognition_id ~ '^F-0(1[1-9]|2[0-3])$'\n  ORDER BY cognition_id, version DESC\n) s\nORDER BY cognition_id"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "观势写过的宪法层（F-001 到 F-010，看他后来有没有出新版本）",
+      "datasource": {"type": "postgres", "uid": "market_tsdb"},
+      "gridPos": {"h": 12, "w": 8, "x": 16, "y": 70},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "editorMode": "code",
+        "rawSql": "SELECT cognition_id AS \"编号\", version AS \"版本\",\n       created_at::date AS \"写入日\", left(title, 28) AS \"标题\"\nFROM (\n  SELECT DISTINCT ON (cognition_id) cognition_id, version, title, created_at\n  FROM cognition\n  WHERE type='constitution' AND status='active' AND actor='guanshi'\n    AND cognition_id ~ '^F-0'\n  ORDER BY cognition_id, version DESC\n) s\nORDER BY cognition_id"
+      }],
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "filterable": true}}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false, "reducer": ["sum"], "countRows": false}}
+    }
+  ]
+}
