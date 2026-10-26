@@ -241,23 +241,23 @@ jobs:
     domain: D9
     target_tables: [market_messages]
     schedule_cron: "*/15 9-15 * * 1-5"
-    source_chain: ["eastmoney", "sina"]
+    source_chain: ["cls"]
     retry_policy: {"tries": 2, "backoff_s": [5, 30]}
     timeout_s: 120
     critical: false
     enabled: true
-    note: "交易时段快讯 */15。直采东财7x24，备源新浪，不经过 lovetrade"
+    note: "交易时段快讯 */15。只采财联社电报"
 
   - job_name: j_market_messages_other
     domain: D9
     target_tables: [market_messages]
     schedule_cron: "*/8 * * * *"
-    source_chain: ["eastmoney", "sina"]
+    source_chain: ["cls"]
     retry_policy: {"tries": 2, "backoff_s": [5, 30]}
     timeout_s: 120
     critical: false
     enabled: true
-    note: "7x24快讯 */8。直采东财，备源新浪；与 j_news_feed 不并行，避免重复采集"
+    note: "7x24快讯 */8。只采财联社电报；与 j_news_feed 不并行"
 
   - job_name: j_plate_intraday
     domain: D6

@@ -4,8 +4,9 @@ j_market_messages - 市场消息采集（不经过 lovetrade-service）
 - j_market_messages_hot: 交易时段快讯（*/15 9-15 交易日）
 - j_market_messages_other: 7x24 快讯（*/8 全天）
 
-主源东财 7x24 快讯，备源新浪财经滚动。两源都空则写 MISS，不编数。
+消息入口只有财联社电报。东财、新浪不再作为快讯源。财联社空或失败则写 MISS，不编数。
 """
+import hashlib
 import json
 import logging
 import time
@@ -17,11 +18,10 @@ from dworker.core.calendar_gate import check_trade_gate
 
 logger = logging.getLogger(__name__)
 
-EASTMONEY_URL = "https://newsapi.eastmoney.com/kuaixun/v1/getlist_102_ajaxResult_50_1_.html"
-SINA_URL = "https://feed.mix.sina.com.cn/api/roll/get"
+CLS_URL = "https://www.cls.cn/v1/roll/get_roll_list"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer": "https://kuaixun.eastmoney.com/",
+    "Referer": "https://www.cls.cn/",
     "Accept": "application/json,text/plain,*/*",
 }
 
@@ -47,72 +47,55 @@ def _skip(ingest_logger, job_name, trigger, note):
     }
 
 
-def _fetch_eastmoney():
-    resp = requests.get(EASTMONEY_URL, headers=HEADERS, timeout=20)
-    resp.raise_for_status()
-    text = resp.text
-    start = text.find("{")
-    payload = json.loads(text[start:])
-    rows = []
-    for item in payload.get("LivesList") or []:
-        news_id = str(item.get("newsid") or item.get("id") or "")
-        showtime = item.get("showtime")
-        title = item.get("title") or item.get("simtitle") or ""
-        if not news_id or not showtime or not title:
-            continue
-        rows.append({
-            "msg_id": news_id,
-            "msg_ts": f"{showtime}+08:00",
-            "title": title,
-            "content": item.get("digest") or item.get("simdigest") or title,
-            "url": item.get("url_w") or item.get("url_unique"),
-        })
-    return rows, payload
+def _cls_sign(params: dict) -> str:
+    qs = "&".join(f"{k}={params[k]}" for k in sorted(params))
+    return hashlib.md5(hashlib.sha1(qs.encode()).hexdigest().encode()).hexdigest()
 
 
-def _fetch_sina():
-    resp = requests.get(
-        SINA_URL,
-        params={"pageid": 153, "lid": 2509, "num": 20, "page": 1},
-        headers=HEADERS,
-        timeout=20,
-    )
+def _fetch_cls():
+    """财联社电报最新一页。8 分钟一轮取 50 条，忙时一页盖得住。"""
+    params = {
+        "appName": "CailianpressWeb",
+        "os": "web",
+        "sv": "7.7.5",
+        "last_time": "",
+        "refresh_type": "1",
+        "rn": "50",
+    }
+    qs = "&".join(f"{k}={params[k]}" for k in sorted(params))
+    url = f"{CLS_URL}?{qs}&sign={_cls_sign(params)}"
+    resp = requests.get(url, headers=HEADERS, timeout=20)
     resp.raise_for_status()
     payload = resp.json()
-    items = (((payload or {}).get("result") or {}).get("data") or [])
+    if payload.get("errno") not in (0, None):
+        raise RuntimeError(f"cls errno={payload.get('errno')}")
     rows = []
-    for item in items:
-        news_id = str(item.get("docid") or item.get("oid") or "")
-        title = item.get("title") or ""
-        ctime = item.get("ctime") or item.get("intime")
-        if not news_id or not title or not ctime:
-            continue
-        try:
-            ts = datetime.fromtimestamp(int(ctime)).strftime("%Y-%m-%d %H:%M:%S+08:00")
-        except (TypeError, ValueError):
+    for item in (payload.get("data") or {}).get("roll_data") or []:
+        news_id = str(item.get("id") or "")
+        ctime = item.get("ctime")
+        title = (item.get("title") or "").strip()
+        content = (item.get("brief") or item.get("content") or "").strip()
+        if not news_id or not ctime or not (title or content):
             continue
         rows.append({
             "msg_id": news_id,
-            "msg_ts": ts,
-            "title": title,
-            "content": item.get("intro") or item.get("summary") or title,
-            "url": item.get("url"),
+            "msg_ts": datetime.fromtimestamp(int(ctime)).strftime("%Y-%m-%d %H:%M:%S+08:00"),
+            "title": title or content[:80],
+            "content": content or title,
+            "url": item.get("shareurl") or item.get("assocArticleUrl"),
         })
     return rows, payload
 
 
 def _fetch():
-    errors = []
-    for source, fn in (("eastmoney", _fetch_eastmoney), ("sina", _fetch_sina)):
-        try:
-            rows, raw = fn()
-            if rows:
-                return source, rows, raw
-            errors.append(f"{source}: empty")
-        except Exception as e:
-            errors.append(f"{source}: {e}")
-            logger.warning(f"market messages {source} failed: {e}")
-    return None, [], {"errors": errors}
+    try:
+        rows, raw = _fetch_cls()
+        if rows:
+            return "cls", rows, raw
+        return None, [], {"errors": ["cls: empty"]}
+    except Exception as e:
+        logger.warning(f"market messages cls failed: {e}")
+        return None, [], {"errors": [f"cls: {e}"]}
 
 
 def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, trigger="scheduled"):
@@ -135,7 +118,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
         raw_archiver.archive("D10", job_name, source or "none", raw)
 
     if not messages:
-        note = "MISS: eastmoney and sina returned no rows"
+        note = "MISS: cls returned no rows"
         ingest_logger.log_run(
             job_name=job_name, domain="D10", target_table="market_messages",
             source_used="none", status="MISS", rows_in=0, rows_written=0,

@@ -8,6 +8,7 @@ E1-E7/E15/E16/E19（M1 部分）+ Bearer token 三档鉴权
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -522,6 +523,59 @@ async def route_map_patch(body: RouteMapBody, _=Depends(require_write)):
 
     invalidate_route_map_cache()
     return envelope({"route_map": rm, "route_map_version": ver})
+
+
+# ─── 次日首板/二板预测（观势 16:00 每日收盘推送调用） ───────────────
+
+_predict_cache: dict = {}
+_predict_cache_ts: dict = {}
+_PREDICT_TTL = 1800
+_predict_lock = threading.Lock()
+
+
+@app.get("/data/predict_limitup")
+def predict_limitup_endpoint(
+    date_str: str = Query(default=None, alias="date"),
+    top_first: int = Query(default=15, ge=1, le=40),
+    top_second: int = Query(default=10, ge=1, le=40),
+    format: str = "json",
+    _=Depends(require_read),
+):
+    """基准日收盘后，预测下一交易日首板 / 二板候选（按题材分组、带概率）。"""
+    from data_api.predict_limitup import (
+        get_conn as predict_conn, predict as predict_next, render_markdown,
+    )
+
+    key = (date_str, top_first, top_second)
+    now = time.time()
+    with _predict_lock:
+        cached = _predict_cache.get(key)
+        fresh = now - _predict_cache_ts.get(key, 0) < _PREDICT_TTL
+    if cached is not None and fresh:
+        result = cached
+    else:
+        conn = None
+        try:
+            conn = predict_conn()
+            d = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else None
+            result = predict_next(conn, d, top_first, top_second)
+        except Exception as e:
+            logger.exception("predict_limitup failed")
+            return error_response("PREDICT_FAILED", str(e), 500)
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        with _predict_lock:
+            _predict_cache[key] = result
+            _predict_cache_ts[key] = now
+
+    if format == "markdown":
+        return Response(content=render_markdown(result),
+                        media_type="text/markdown; charset=utf-8")
+    return envelope({**result, "markdown": render_markdown(result)})
 
 
 # ─── E5 /data/{table} ─────────────────────────────────────────────────
