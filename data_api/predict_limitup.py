@@ -9,9 +9,13 @@ L2 逻辑回归分别估计
 
 口径与既有回测一致：
   - 涨停阈值：ST 4.8 / sz30·sh68 19.8 / 其余 9.8
-  - 主样本：沪深 A 股、流通市值 < 300 亿（用最新 circ_mv 静态映射）
+  - 主样本：沪深 A 股、流通市值 < 300 亿。有逐日 circ_mv 的日子用当天的；
+    更早的日子只用该股第一次观测到的流通市值，不用之后更新的值
   - 标签与特征均按相邻交易日计算；停牌/无量的 T+1 不计入
-  - 主题材用 stock_sector_map（kind=theme, effective_to IS NULL, 801 开头）
+  - 题材用开盘啦 stock_sector_map（801 开头），按当天有效区间取值，不用之后才出现的归属。
+    父子板块来自开盘啦 SonPlate：股票落在子板块上写成「父 / 分支」
+  - 首板候选不选过往龙头。只留：前期缩量后连续放量，或急跌之后，
+    并且放量上影还在放大，同时落在风口题材上
 
 不依赖 sklearn：numpy 手写 Adam + 标准化，概率由逻辑回归直接给出。
 
@@ -105,11 +109,25 @@ def load_index(conn, start: str) -> pd.DataFrame:
 
 
 def load_themes(conn) -> pd.DataFrame:
-    return _query(conn, """
-        SELECT code, sector_code, sector_name
+    df = _query(conn, """
+        SELECT code, sector_code, sector_name, effective_from, effective_to
         FROM stock_sector_map
-        WHERE kind = 'theme' AND effective_to IS NULL AND sector_code LIKE '801%%'
+        WHERE kind = 'theme' AND sector_code LIKE '801%%'
     """)
+    if df.empty:
+        return df
+    df["effective_from"] = pd.to_datetime(df["effective_from"]).dt.date
+    df["effective_to"] = pd.to_datetime(df["effective_to"]).dt.date
+    return df
+
+
+def themes_on(themes: pd.DataFrame, d: date) -> pd.DataFrame:
+    """当天已经生效、还没被关掉的开盘啦归属。之后才写入的映射不往回用。"""
+    if themes.empty:
+        return themes
+    et = themes["effective_to"]
+    m = themes[(themes["effective_from"] <= d) & (et.isna() | (et > d))]
+    return m.drop_duplicates(["code", "sector_code"])
 
 
 def load_zt_today(conn, d: date) -> pd.DataFrame:
@@ -124,6 +142,10 @@ def load_zb_today(conn, d: date) -> pd.DataFrame:
     return _query(conn, """
         SELECT code, name, pct, break_times FROM zb_pool WHERE date = %s
     """, [d])
+
+
+def load_dt_today(conn, d: date) -> pd.DataFrame:
+    return _query(conn, "SELECT code, name FROM dt_pool WHERE date = %s", [d])
 
 
 def load_fund_today(conn, d: date) -> pd.DataFrame:
@@ -178,11 +200,39 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
     df["is_20cm"] = df["code"].str.startswith(("sz30", "sh68")).astype(int)
     df["is_sealed"] = (df["close"] >= df["high"] - 1e-6).astype(int)
 
-    # 流通市值：历史多为空，用每票最新值（与既有回测口径一致）
-    latest_mv = (df.dropna(subset=["circ_mv"]).sort_values("date")
-                 .groupby("code")["circ_mv"].last())
-    df["mv"] = df["code"].map(latest_mv)
+    # 流通市值：当天有值用当天。前面的空档只用该股第一次观测值，不用更晚的值。
+    obs = df["circ_mv"].where(df["circ_mv"] > 0)
+    filled = obs.groupby(df["code"]).ffill()
+    first_map = df.loc[obs.notna()].groupby("code")["circ_mv"].first()
+    df["mv"] = filled.fillna(df["code"].map(first_map))
     df["log_circ"] = np.log(df["mv"].clip(lower=1))
+
+    v1 = g["volume"].shift(1)
+    v2 = g["volume"].shift(2)
+    vol_quiet = g["volume"].transform(lambda x: x.shift(6).rolling(15, min_periods=10).mean())
+    vol_base = g["volume"].transform(lambda x: x.shift(21).rolling(20, min_periods=15).mean())
+    df["shrink"] = vol_quiet < vol_base * 0.75
+    df["burst3"] = (df["volume"] > v1) & (v1 > v2) & (df["volume"] > vol_quiet * 1.5)
+    df["crash"] = df["cum3"] <= -8
+    df["shadow_cont"] = (
+        (df["upper_shadow"] > 2) & (df["vol_ratio5"] >= 1.5) & (df["volume"] > v1)
+    )
+    max_board60 = g["board_days"].transform(
+        lambda x: x.shift(1).rolling(60, min_periods=1).max())
+    df["old_dragon"] = (df["recent_zt20"].fillna(0) >= 2) | (max_board60.fillna(0) >= 3)
+    df["pattern_ok"] = (
+        (~df["old_dragon"].fillna(False))
+        & df["shadow_cont"].fillna(False)
+        & (
+            (df["shrink"].fillna(False) & df["burst3"].fillna(False))
+            | df["crash"].fillna(False)
+        )
+    )
+    df["pattern_kind"] = ""
+    crash_hit = df["pattern_ok"] & df["crash"].fillna(False)
+    shrink_hit = df["pattern_ok"] & ~crash_hit
+    df.loc[crash_hit, "pattern_kind"] = "急跌后放量上影"
+    df.loc[shrink_hit, "pattern_kind"] = "缩量后连续放量上影"
 
     # 市场宽度
     mkt = df.groupby("date").agg(
@@ -208,49 +258,256 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
 
 
 def _attach_theme_stats(df: pd.DataFrame, themes: pd.DataFrame) -> pd.DataFrame:
+    """题材热度按当天有效归属计算。映射开始之前的日子记 0，避免用后来的标签。"""
     if themes.empty:
         for c in ("theme_zt", "theme_zt3", "theme_height"):
             df[c] = 0.0
         df["theme_name"] = ""
+        df["theme_code"] = ""
         return df
 
-    themes = themes.drop_duplicates(["code", "sector_code"]).copy()
-    name_of = themes.drop_duplicates("sector_code").set_index("sector_code")["sector_name"]
-
+    map_start = themes["effective_from"].min()
+    dates = [d for d in sorted(df["date"].unique()) if d >= map_start]
     lu = df.loc[df["is_lu"], ["date", "code", "board_days"]]
-    td = lu.merge(themes, on="code", how="inner")
-    td = td.groupby(["date", "sector_code"]).agg(
-        zt=("code", "count"), height=("board_days", "max")).reset_index()
-
-    dates = sorted(df["date"].unique())
-    all_sec = sorted(themes["sector_code"].unique())
-    piv = td.pivot(index="date", columns="sector_code", values="zt") \
-        .reindex(index=dates, columns=all_sec).fillna(0.0)
-    ph = td.pivot(index="date", columns="sector_code", values="height") \
-        .reindex(index=dates, columns=all_sec).fillna(0.0)
-    p3 = piv.rolling(3, min_periods=1).sum()
-
-    zt_long = piv.stack().rename("theme_zt").reset_index()
-    zt_long.columns = ["date", "sector_code", "theme_zt"]
-    zt_long["theme_zt3"] = p3.stack().values
-    zt_long["theme_height"] = ph.stack().values
-    zt_long["theme_name"] = zt_long["sector_code"].map(name_of)
-
     pieces = []
-    month = pd.to_datetime(df["date"]).dt.to_period("M")
-    for _, chunk in df.groupby(month):
-        m = chunk[["date", "code"]].merge(themes, on="code", how="left")
-        m = m.merge(zt_long, on=["date", "sector_code"], how="left")
-        m[["theme_zt", "theme_zt3", "theme_height"]] = \
-            m[["theme_zt", "theme_zt3", "theme_height"]].fillna(0.0)
-        # 取该股所属题材中最热的一个
+    zt_hist: Dict[str, List[tuple]] = {}
+    for d in dates:
+        mem = themes_on(themes, d)
+        if mem.empty:
+            continue
+        name_of = (mem.drop_duplicates("sector_code")
+                   .set_index("sector_code")["sector_name"])
+        day_lu = lu[lu["date"] == d]
+        zt_map: Dict[str, int] = {}
+        ht_map: Dict[str, int] = {}
+        if len(day_lu):
+            td = day_lu.merge(mem[["code", "sector_code"]], on="code", how="inner")
+            if len(td):
+                agg = td.groupby("sector_code").agg(
+                    zt=("code", "nunique"), height=("board_days", "max"))
+                zt_map = {k: int(v) for k, v in agg["zt"].items()}
+                ht_map = {k: int(v) for k, v in agg["height"].items()}
+        for sec, zt in zt_map.items():
+            zt_hist.setdefault(sec, []).append((d, zt, ht_map.get(sec, 0)))
+        codes = df.loc[df["date"] == d, ["date", "code"]]
+        m = codes.merge(mem[["code", "sector_code"]], on="code", how="left")
+        m["theme_zt"] = m["sector_code"].map(zt_map).fillna(0.0)
+        m["theme_height"] = m["sector_code"].map(ht_map).fillna(0.0)
+        m["theme_name"] = m["sector_code"].map(name_of).fillna("")
+        m["theme_code"] = m["sector_code"].fillna("")
         m = m.sort_values(["date", "code", "theme_zt"], ascending=[True, True, False])
-        agg = m.groupby(["date", "code"], as_index=False).first()
-        pieces.append(agg[["date", "code", "theme_zt", "theme_zt3",
-                           "theme_height", "theme_name"]])
+        pieces.append(m.groupby(["date", "code"], as_index=False).first()[
+            ["date", "code", "theme_zt", "theme_height", "theme_name", "theme_code"]])
+    if not pieces:
+        for c in ("theme_zt", "theme_height"):
+            df[c] = 0.0
+        df["theme_name"] = ""
+        df["theme_code"] = ""
+        df["theme_zt3"] = 0.0
+        return df
     out = pd.concat(pieces, ignore_index=True)
-    return df.merge(out, on=["date", "code"], how="left").fillna(
-        {"theme_zt": 0.0, "theme_zt3": 0.0, "theme_height": 0.0, "theme_name": ""})
+    zt3 = {}
+    for sec, seq in zt_hist.items():
+        seq = sorted(seq)
+        window = []
+        for d, zt, _h in seq:
+            window.append(zt)
+            zt3[(d, sec)] = float(sum(window[-3:]))
+    out["theme_zt3"] = [
+        zt3.get((d, c), 0.0) for d, c in zip(out["date"], out["theme_code"])
+    ]
+    return df.merge(
+        out[["date", "code", "theme_zt", "theme_zt3", "theme_height",
+             "theme_name", "theme_code"]],
+        on=["date", "code"], how="left",
+    ).fillna({"theme_zt": 0.0, "theme_zt3": 0.0, "theme_height": 0.0,
+              "theme_name": "", "theme_code": ""})
+
+
+HOT_PHASES = {"聚集未完成", "启动期", "发酵期", "高潮期"}
+# 这些是身份或事件标签，涨停家数会很大，但不能当成舞台本身。
+POCKET_THEMES = {
+    "业绩增长", "中报增长", "三季报增长", "年报增长", "预盈预增",
+    "股权转让", "国有企业", "地方国企", "央企", "国企改革", "央国企改革",
+    "超跌", "低价股", "沪股通", "深股通", "融资融券", "证金持股",
+}
+PLATE_CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "kpl_plate_tree.json"
+
+
+def load_plate_tree(parents: Optional[dict] = None) -> dict:
+    """开盘啦子板块。child_code -> {parent_code, parent_name, child_name}。
+
+    缓存 20 小时。接口失败时用已有缓存，没有缓存就返回空，不编父子关系。
+    """
+    import time
+    cached = None
+    if PLATE_CACHE.exists():
+        try:
+            cached = json.loads(PLATE_CACHE.read_text())
+        except Exception:
+            cached = None
+        if cached and time.time() - PLATE_CACHE.stat().st_mtime < 20 * 3600:
+            return cached.get("children") or {}
+    try:
+        fresh = _fetch_plate_tree(parents or {})
+    except Exception:
+        fresh = None
+    if fresh:
+        PLATE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        PLATE_CACHE.write_text(json.dumps({"children": fresh}, ensure_ascii=False))
+        return fresh
+    return (cached or {}).get("children") or {}
+
+
+def _fetch_plate_tree(parents: dict) -> dict:
+    import requests
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    conf = yaml.safe_load(SECRETS_PATH.read_text()) if SECRETS_PATH.exists() else {}
+    lh = conf.get("longhu") or {}
+    device = ((lh.get("account_3167791") or {}).get("device_id")) or ""
+    host = (lh.get("hosts") or {}).get("apphwhq") or "https://apphwhq.longhuvip.com/w1/api/index.php"
+    headers = {
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12)",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    }
+    parent_name = {str(k): v for k, v in (parents or {}).items() if str(k).startswith("80")}
+
+    def one(code: str):
+        try:
+            resp = requests.post(host, data={
+                "a": "SonPlate_Info", "c": "ZhiShuRanking",
+                "PhoneOSNew": "1", "VerSion": "5.21.0.0", "apiv": "w42",
+                "DeviceID": device, "PlateID": code,
+            }, headers=headers, timeout=12)
+            data = resp.json()
+        except Exception:
+            return code, []
+        if str(data.get("errcode", "0")) not in ("0", ""):
+            return code, []
+        kids = []
+        raw = data.get("List") or data.get("list") or []
+        for item in raw:
+            if isinstance(item, list) and len(item) >= 2 and str(item[0]).startswith("80"):
+                kids.append((str(item[0]), str(item[1])))
+        return code, kids
+
+    children = {}
+    codes = list(parent_name)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futs = [pool.submit(one, c) for c in codes]
+        for fut in as_completed(futs):
+            parent, kids = fut.result()
+            for child, child_name in kids:
+                # 一个分支只挂到先看到的父题材上；展示时若股票同时属于多个父，再按当天涨停选
+                children.setdefault(child, {
+                    "parent_code": parent,
+                    "parent_name": parent_name.get(parent) or parent,
+                    "child_name": child_name,
+                })
+    return children
+
+
+def _pick_theme(codes_themes: pd.DataFrame, stats: dict, tree: dict) -> dict:
+    """在这只股票的开盘啦标签里，优先当天有涨停的分支，而不是更宽的父题材。"""
+    best = {"theme": "", "theme_code": "", "role": "", "parent": "",
+            "zt": 0, "height": 0, "phase": "无涨停", "zt3": []}
+    if codes_themes is None or len(codes_themes) == 0:
+        return best
+    rows = []
+    for _, r in codes_themes.iterrows():
+        sec = str(r["sector_code"])
+        st = stats.get(sec) or {}
+        info = tree.get(sec) or {}
+        rows.append({
+            "code": sec,
+            "name": st.get("name") or r["sector_name"] or info.get("child_name") or "",
+            "zt": int(st.get("zt") or 0),
+            "height": int(st.get("height") or 0),
+            "phase": st.get("phase") or "无涨停",
+            "zt3": st.get("zt3") or [],
+            "is_child": sec in tree,
+            "parent_name": info.get("parent_name") or "",
+            "parent_code": info.get("parent_code") or "",
+        })
+    def _rank(x):
+        pocket = 0 if x["name"] in POCKET_THEMES else 1
+        return (pocket, 1 if x["is_child"] else 0, x["zt"], x["height"])
+
+    hot_children = [x for x in rows if x["is_child"] and x["zt"] > 0 and x["name"] not in POCKET_THEMES]
+    if hot_children:
+        chosen = max(hot_children, key=_rank)
+        label = f"{chosen['parent_name']} / {chosen['name']}" if chosen["parent_name"] else chosen["name"]
+        return {**best, "theme": label, "theme_code": chosen["code"], "role": "分支",
+                "parent": chosen["parent_name"], "zt": chosen["zt"],
+                "height": chosen["height"], "phase": chosen["phase"], "zt3": chosen["zt3"]}
+    alive = [x for x in rows if x["zt"] > 0 and x["name"] not in POCKET_THEMES]
+    pool = alive or [x for x in rows if x["zt"] > 0] or rows
+    chosen = max(pool, key=_rank)
+    role = ""
+    parent = ""
+    child_parents = {info["parent_code"] for info in tree.values()}
+    if chosen["code"] in child_parents and not chosen["is_child"]:
+        role = "父题材"
+        parent = chosen["name"]
+        label = f"{chosen['name']}（父题材）"
+    else:
+        label = chosen["name"]
+    return {**best, "theme": label, "theme_code": chosen["code"], "role": role,
+            "parent": parent, "zt": chosen["zt"], "height": chosen["height"],
+            "phase": chosen["phase"], "zt3": chosen["zt3"]}
+
+
+def _sector_stats(df: pd.DataFrame, mem: pd.DataFrame, d: date,
+                  prev: Optional[date], zb_today: pd.DataFrame,
+                  zb_prev: pd.DataFrame) -> dict:
+    """每个开盘啦板块当天的涨停、严格连板高度、炸板和阶段。"""
+    if mem.empty:
+        return {}
+    name_of = (mem.drop_duplicates("sector_code")
+               .set_index("sector_code")["sector_name"].to_dict())
+    dates = sorted(df["date"].unique())
+    hist_dates = [x for x in dates if x <= d][-3:]
+    lu = df.loc[df["is_lu"] & df["date"].isin(hist_dates), ["date", "code", "board_days"]]
+    td = lu.merge(mem[["code", "sector_code"]], on="code", how="inner")
+    by_sec: Dict[str, dict] = {}
+    for sec, name in name_of.items():
+        by_sec[sec] = {"name": name, "zt": 0, "height": 0, "zt3": [],
+                       "broken": 0, "broken_prev": 0, "high_broken": False, "phase": "无涨停"}
+    if len(td):
+        for day, g in td.groupby("date"):
+            agg = g.groupby("sector_code").agg(zt=("code", "nunique"), height=("board_days", "max"))
+            for sec, row in agg.iterrows():
+                node = by_sec.get(sec)
+                if node is None:
+                    continue
+                if day == d:
+                    node["zt"] = int(row["zt"])
+                    node["height"] = int(row["height"])
+                node["zt3"].append(int(row["zt"]))
+    # 高位断板：昨天严格连板 >= 4，今天没涨停
+    if prev is not None:
+        y = df[(df["date"] == prev) & (df["board_days"] >= 4)][["code", "board_days"]]
+        today_lu = set(df.loc[(df["date"] == d) & df["is_lu"], "code"])
+        broken_codes = set(y.loc[~y["code"].isin(today_lu), "code"])
+        if broken_codes:
+            hit = mem[mem["code"].isin(broken_codes)]["sector_code"].unique()
+            for sec in hit:
+                if sec in by_sec:
+                    by_sec[sec]["high_broken"] = True
+    def _broken(pool, key):
+        if pool is None or len(pool) == 0:
+            return
+        codes = set(pool["code"])
+        hit = mem[mem["code"].isin(codes)].groupby("sector_code")["code"].nunique()
+        for sec, n in hit.items():
+            if sec in by_sec:
+                by_sec[sec][key] = int(n)
+    _broken(zb_today, "broken")
+    _broken(zb_prev, "broken_prev")
+    for node in by_sec.values():
+        node["phase"] = _phase(node["zt"], node["zt3"], node["height"],
+                               node["broken"], node["broken_prev"], node["high_broken"])
+    return by_sec
 
 
 # ─────────────────────────── 模型 ───────────────────────────
@@ -529,20 +786,33 @@ def _fit_predict(df: pd.DataFrame, label_col: str, train_mask: pd.Series,
 
 # ─────────────────────────── 主流程 ───────────────────────────
 
-def _phase(zt_today: int, zt3: List[int], height: int) -> str:
+def _phase(zt_today: int, zt3: List[int], height: int,
+          broken: int = 0, broken_prev: int = 0, high_broken: bool = False) -> str:
+    """高度够 3 板不够把题材叫成启动期。涨停掉下来、高位断板或炸板变多，先是分歧。"""
     if zt_today <= 0:
         return "无涨停"
-    seq = zt3[-3:]
-    rising = len(seq) >= 2 and seq[-1] > seq[-2]
-    if height >= 6:
+    seq = list(zt3[-3:])
+    prev = seq[-2] if len(seq) >= 2 else None
+    rising = prev is not None and zt_today > prev
+    falling = prev is not None and zt_today < prev and (prev - zt_today) >= max(3, int(prev * 0.2))
+    broken_up = broken > broken_prev and broken >= 3
+    if prev is not None and prev >= 8 and zt_today * 2 <= prev:
+        return "退潮 / 冰点"
+    if falling and (high_broken or broken_up or height >= 3):
+        return "分歧期"
+    if broken_up and not rising:
+        return "分歧期"
+    if height >= 6 and not falling:
         return "高潮期"
-    if height >= 4:
+    if height >= 4 and (rising or prev is None):
         return "发酵期"
-    if height >= 3:
+    if height >= 3 and rising:
         return "启动期"
-    if rising:
+    if rising or (prev is None and zt_today > 0 and height < 3):
         return "聚集未完成"
-    return "分歧/退潮"
+    if falling:
+        return "分歧期"
+    return "分歧期"
 
 
 def _fmt_reason(row) -> List[str]:
@@ -572,9 +842,9 @@ def _fmt_reason(row) -> List[str]:
     tz = row.get("theme_zt")
     if pd.notna(tz) and tz > 0:
         r.append(f"题材今日{int(tz)}只涨停")
-    rz = row.get("recent_zt20")
-    if pd.notna(rz) and rz >= 2:
-        r.append(f"20日内{int(rz)}次涨停")
+    kind = row.get("pattern_kind")
+    if isinstance(kind, str) and kind:
+        r.insert(0, kind)
     return r
 
 
@@ -616,16 +886,24 @@ def predict(conn, target_date: Optional[date] = None,
 
     zt_today = load_zt_today(conn, target_date)
     zb_today = load_zb_today(conn, target_date)
+    dt_today = load_dt_today(conn, target_date)
     fund = load_fund_today(conn, target_date)
     fund_map = {r["code"]: r for _, r in fund.iterrows()} if len(fund) else {}
     zt_map = {r["code"]: r for _, r in zt_today.iterrows()} if len(zt_today) else {}
     zb_map = {r["code"]: r for _, r in zb_today.iterrows()} if len(zb_today) else {}
 
-    # 主题材热度序列表（用于“3日序列”展示）
-    theme_series = _theme_series(df, themes)
+    prev = dates[dates.index(target_date) - 1] if target_date in dates and dates.index(target_date) else None
+    zb_prev = load_zb_today(conn, prev) if prev else zb_today.iloc[0:0]
+    mem = themes_on(themes, target_date)
+    stats = _sector_stats(df, mem, target_date, prev, zb_today, zb_prev)
+    hot_parents = {sec: node["name"] for sec, node in stats.items() if node.get("zt", 0) >= 3}
+    tree = load_plate_tree(hot_parents)
+    labels = _labels_for(mem, stats, tree)
 
-    first = _pack(tgt1, top_first, zt_map, zb_map, fund_map, theme_series, "first")
-    second = _pack(tgt2, top_second, zt_map, zb_map, fund_map, theme_series, "second")
+    tgt1 = _screen(tgt1, df, labels, "first")
+    tgt2 = _screen(tgt2, df, labels, "second")
+    first = _pack(tgt1, top_first, zt_map, zb_map, fund_map, labels, "first")
+    second = _pack(tgt2, top_second, zt_map, zb_map, fund_map, labels, "second")
 
     # 按题材归组；“无题材归属”永远放最后
     def group(items):
@@ -640,20 +918,30 @@ def predict(conn, target_date: Optional[date] = None,
                                                  -max(c["prob"] for c in x["candidates"]),
                                                  -x["zt_today"]))
 
-    market = _market_snapshot(df, target_date, zt_today, zb_today)
+    market = _market_snapshot(df, target_date, zt_today, zb_today, dt_today)
     next_td = _next_trade_date(conn, target_date)
+    strict = df.loc[df["date"] == target_date].set_index("code")["board_days"]
 
     highs = []
     for _, r in zt_today.iterrows():
-        if int(r["board_days"] or 0) >= 3:
-            highs.append({"code": r["code"], "name": r["name"],
-                          "board_days": int(r["board_days"]),
-                          "pct": float(r["pct"] or 0),
-                          "theme": r["theme"] or ""})
+        b = int(strict.get(r["code"], 0) or 0)
+        if b < 3:
+            continue
+        lab = labels.get(r["code"]) or {}
+        highs.append({"code": r["code"], "name": r["name"],
+                      "board_days": b,
+                      "pct": float(r["pct"] or 0),
+                      "theme": lab.get("theme") or ""})
     highs.sort(key=lambda x: -x["board_days"])
 
     panic = _panic_watch(df, target_date, max_mv)
-    gaps = _data_gaps(df, zt_today, target_date)
+    gaps = _data_gaps(df, zt_today, target_date, themes, fund)
+    auc2 = (ev2 or {}).get("auc")
+    if auc2 is not None and auc2 < 0.65:
+        gaps.append(
+            f"二板模型 AUC {auc2}，排序仍然弱于首板。名单已按形态和风口过滤，不按老龙反包来排"
+        )
+    watchlist = _watchlist(mem, stats, tree, df, zt_today, target_date, first, second)
 
     return {
         "as_of": str(target_date),
@@ -675,11 +963,80 @@ def predict(conn, target_date: Optional[date] = None,
             "panic_watch": panic,
         },
         "gaps": gaps,
+        "watchlist": watchlist,
     }
 
 
+def _labels_for(mem: pd.DataFrame, stats: dict, tree: dict) -> dict:
+    labels = {}
+    if mem.empty:
+        return labels
+    for code, g in mem.groupby("code"):
+        labels[code] = _pick_theme(g, stats, tree)
+    return labels
+
+
+def _screen(tgt: pd.DataFrame, df: pd.DataFrame, labels: dict, kind: str) -> pd.DataFrame:
+    if tgt is None or len(tgt) == 0:
+        return tgt
+    flags = df.loc[tgt.index, ["pattern_ok", "old_dragon", "pattern_kind"]]
+    out = tgt.copy()
+    out["pattern_ok"] = flags["pattern_ok"].to_numpy()
+    out["old_dragon"] = flags["old_dragon"].to_numpy()
+    out["pattern_kind"] = flags["pattern_kind"].to_numpy()
+    if kind == "first":
+        out = out[out["pattern_ok"].fillna(False)]
+    else:
+        out = out[~out["old_dragon"].fillna(False)]
+    keep = []
+    for idx, r in out.iterrows():
+        lab = labels.get(r["code"]) or {}
+        if lab.get("phase") in HOT_PHASES:
+            keep.append(idx)
+    return out.loc[keep]
+
+
+def _watchlist(mem, stats, tree, df, zt_today, d, first, second) -> List[dict]:
+    """每个风口题材：要看的个股、可能的一板、可能的二板。"""
+    strict = df.loc[df["date"] == d].set_index("code")["board_days"]
+    buckets: Dict[str, dict] = {}
+
+    def node(theme, phase):
+        return buckets.setdefault(theme, {
+            "theme": theme, "phase": phase, "leaders": [], "first": [], "second": [],
+        })
+
+    if len(zt_today):
+        for _, r in zt_today.iterrows():
+            sub = mem[mem["code"] == r["code"]] if len(mem) else mem
+            lab = _pick_theme(sub, stats, tree)
+            if not lab.get("theme"):
+                continue
+            if lab.get("phase") not in HOT_PHASES and int(lab.get("zt") or 0) < 5:
+                continue
+            b = int(strict.get(r["code"], 0) or 0)
+            node(lab["theme"], lab["phase"])["leaders"].append({
+                "code": r["code"], "name": r["name"], "board": b,
+            })
+    for kind, items in (("first", first), ("second", second)):
+        for it in items:
+            if not it.get("theme"):
+                continue
+            node(it["theme"], it.get("phase") or "")[kind].append({
+                "code": it["code"], "name": it["name"], "prob": it["prob"],
+            })
+    out = []
+    for g in buckets.values():
+        g["leaders"] = sorted(g["leaders"], key=lambda x: -x["board"])[:6]
+        if not g["leaders"] and not g["first"] and not g["second"]:
+            continue
+        out.append(g)
+    out.sort(key=lambda g: (-(g["leaders"][0]["board"] if g["leaders"] else 0), g["theme"]))
+    return out[:24]
+
+
 def _pack(tgt: pd.DataFrame, top: int, zt_map, zb_map, fund_map,
-          theme_series, kind: str) -> List[dict]:
+          labels, kind: str) -> List[dict]:
     if tgt is None or len(tgt) == 0:
         return []
     sort_col = "score_raw" if "score_raw" in tgt.columns else "prob"
@@ -690,16 +1047,17 @@ def _pack(tgt: pd.DataFrame, top: int, zt_map, zb_map, fund_map,
         z = zt_map.get(code)
         zb = zb_map.get(code)
         f = fund_map.get(code)
-        tn = r.get("theme_name")
-        theme = tn if isinstance(tn, str) and tn.strip() else ""
-        if not theme and z is not None:
-            theme = (z["theme"] or "").strip()
+        lab = labels.get(code) or {}
+        theme = lab.get("theme") or ""
         reasons = _fmt_reason(r)
         if z is not None:
             if z["first_seal_time"]:
                 reasons.append(f"首封{str(z['first_seal_time'])[:5]}")
             if z["seal_amount"]:
                 reasons.append(f"封单{float(z['seal_amount']) / 1e4:.0f}万")
+            reason_text = str(z["reason"] or z["theme"] or "").strip()
+            if reason_text:
+                reasons.append(f"涨停原因:{reason_text[:24]}")
         if zb is not None and int(zb["break_times"] or 0) > 0:
             reasons.append(f"今日炸板{int(zb['break_times'])}次")
         if f is not None and pd.notna(f["main_net_pct"]):
@@ -709,12 +1067,11 @@ def _pack(tgt: pd.DataFrame, top: int, zt_map, zb_map, fund_map,
             "name": r.get("name", ""),
             "prob": round(float(r["prob"]) * 100, 1),
             "theme": theme,
-            "theme_zt_today": int(r.get("theme_zt") or 0),
-            "theme_zt3": theme_series.get(theme, []),
-            "theme_height": int(r.get("theme_height") or 0),
-            "phase": _phase(int(r.get("theme_zt") or 0),
-                            theme_series.get(theme, []),
-                            int(r.get("theme_height") or 0)),
+            "theme_role": lab.get("role") or "",
+            "theme_zt_today": int(lab.get("zt") or 0),
+            "theme_zt3": lab.get("zt3") or [],
+            "theme_height": int(lab.get("height") or 0),
+            "phase": lab.get("phase") or "无涨停",
             "reasons": reasons,
             "board_condition": ("明日涨停即二板" if kind == "second"
                                 else "明日涨停即首板"),
@@ -754,10 +1111,10 @@ def _next_trade_date(conn, d: date) -> Optional[date]:
     return v.date() if isinstance(v, datetime) else v
 
 
-def _market_snapshot(df, d, zt_today, zb_today) -> dict:
+def _market_snapshot(df, d, zt_today, zb_today, dt_today=None) -> dict:
     day = df[df["date"] == d]
-    lu = int(day["is_lu"].sum())
-    ld = int(day["is_ld"].sum())
+    lu = int(len(zt_today)) if zt_today is not None and len(zt_today) else int(day["is_lu"].sum())
+    ld = int(len(dt_today)) if dt_today is not None and len(dt_today) else int(day["is_ld"].sum())
     up = int((day["pct"] > 0).sum())
     down = int((day["pct"] < 0).sum())
     height = int(day["board_days"].max()) if len(day) else 0
@@ -827,14 +1184,24 @@ def _panic_watch(df, d, max_mv) -> List[dict]:
     return out
 
 
-def _data_gaps(df, zt_today, d) -> List[str]:
+def _data_gaps(df, zt_today, d, themes, fund) -> List[str]:
     gaps = []
     if len(zt_today) == 0:
         gaps.append(f"zt_pool 在 {d} 无数据")
     if df.loc[df["date"] == d, "amount"].isna().all():
         gaps.append("stock_daily.amount 历史缺失，成交额未参与模型")
-    gaps.append("题材归属用当前有效映射（effective_to IS NULL），历史训练存在轻微前视")
-    gaps.append("历史流通市值缺失，用每票最新 circ_mv 静态映射")
+    if not themes.empty:
+        start = themes["effective_from"].min()
+        gaps.append(
+            f"{start} 之前没有开盘啦归属，那些日子题材特征记 0，不用后来才出现的映射"
+        )
+    gaps.append(
+        "2026-10-08 之前没有逐日流通市值，那些日子用该股第一次观测到的流通市值，不用之后更新的值"
+    )
+    gaps.append("北向买卖额交易所已停更，库里没有公开序列，没有用别的数代替")
+    gaps.append("没有讨论区原文。人气用 theme_heat 里的同花顺热股和热概念，不另编热度")
+    if fund is not None and len(fund) < 1000:
+        gaps.append(f"{d} fund_flow_stock 只有 {len(fund)} 条，个股资金流不完整")
     if len(df[df["date"] == d]) < 3000:
         gaps.append(f"{d} 日线覆盖不足（{len(df[df['date']==d])} 只）")
     return gaps
@@ -866,7 +1233,7 @@ def render_markdown(r: dict) -> str:
         ("second_board", "二板候选（今日首板 → 明日二板）",
          "二板是“题材发酵确认”，概率来自首板同日条件；开盘一致性兑现，别在跳空上追。"),
         ("first_board", "首板候选（今日未涨停 → 明日首板）",
-         "首板是“题材聚集信号”，不是买入信号；按题材成组看，单票概率天然偏低。"),
+         "只留前期缩量后连续放量，或急跌之后放量上影还在放大，并且落在风口题材上的票。过往龙头、反包不进这个名单。"),
     ):
         lines.append(f"\n### {title}\n")
         lines.append(f"_{note}_\n")
