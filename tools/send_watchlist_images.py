@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""取当日预测，生成风向个股、一板、二板三张图，发到飞书文字简报所在的群。"""
+"""取当日预测，生成风向个股、以及一板和二板合成的一张图，发到飞书文字简报所在的群。"""
 from __future__ import annotations
 
 import json
@@ -11,10 +11,10 @@ from pathlib import Path
 TOKEN = Path("/home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token")
 API = "http://127.0.0.1:8787/data/predict_limitup?format=json"
 PUSH = Path("/home/hello/application/red/workdsh/runtime/preview/agents/skills/feishu-push/scripts/feishu_push.py")
+MARKER_DIR = Path("/home/hello/文档/deepseek-harness/default-workspace/观势简报")
 TITLES = {
     "leaders": "观势 · 风向个股",
-    "first": "观势 · 可能的一板",
-    "second": "观势 · 可能的二板",
+    "boards": "观势 · 可能的一板 / 二板",
 }
 
 
@@ -26,10 +26,16 @@ def main() -> None:
     result = payload.get("data") or payload
     if not result.get("watchlist") and not result.get("as_of"):
         raise SystemExit("预测接口没有返回可用结果")
+    day = str(result.get("as_of") or "unknown")
+    marker = MARKER_DIR / f".watchlist-sent-{day}"
+    if marker.is_file():
+        print(f"already sent {day}")
+        return
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from render_watchlist import render_three
+    from render_watchlist import render_images
 
-    for path in render_three(result):
+    sent = []
+    for path in render_images(result):
         kind = path.stem.rsplit("_", 1)[-1]
         proc = subprocess.run(
             [
@@ -41,7 +47,10 @@ def main() -> None:
         )
         if proc.returncode != 0:
             raise SystemExit(proc.returncode)
+        sent.append(path)
         print(path)
+    MARKER_DIR.mkdir(parents=True, exist_ok=True)
+    marker.write_text("\n".join(str(p) for p in sent) + "\n")
 
 
 if __name__ == "__main__":

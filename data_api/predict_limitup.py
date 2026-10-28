@@ -996,14 +996,30 @@ def _screen(tgt: pd.DataFrame, df: pd.DataFrame, labels: dict, kind: str) -> pd.
     return out.loc[keep]
 
 
+def _keep_watch_theme(phase: str, height: int, zt: int, role: str, stock_board: int) -> bool:
+    """风向标只留明天值得看一眼的舞台。一只 1 板的标签不进。"""
+    if phase in ("退潮 / 冰点", "无涨停", ""):
+        return False
+    if phase == "分歧期":
+        return stock_board >= 4
+    if stock_board >= 3:
+        return True
+    if role == "父题材":
+        return phase in ("启动期", "发酵期", "高潮期")
+    if phase in ("启动期", "发酵期", "高潮期"):
+        return True
+    return phase == "聚集未完成" and height >= 2 and zt >= 3
+
+
 def _watchlist(mem, stats, tree, df, zt_today, d, first, second) -> List[dict]:
-    """每个风口题材：要看的个股、可能的一板、可能的二板。"""
+    """每个值得看的题材只留最高那只，用来看情绪还在不在。"""
     strict = df.loc[df["date"] == d].set_index("code")["board_days"]
     buckets: Dict[str, dict] = {}
 
     def node(theme, phase):
         return buckets.setdefault(theme, {
-            "theme": theme, "phase": phase, "leaders": [], "first": [], "second": [],
+            "theme": theme, "phase": phase, "height": 0, "zt": 0,
+            "leaders": [], "first": [], "second": [],
         })
 
     if len(zt_today):
@@ -1012,27 +1028,36 @@ def _watchlist(mem, stats, tree, df, zt_today, d, first, second) -> List[dict]:
             lab = _pick_theme(sub, stats, tree)
             if not lab.get("theme"):
                 continue
-            if lab.get("phase") not in HOT_PHASES and int(lab.get("zt") or 0) < 5:
-                continue
             b = int(strict.get(r["code"], 0) or 0)
-            node(lab["theme"], lab["phase"])["leaders"].append({
+            phase = lab.get("phase") or ""
+            height = int(lab.get("height") or 0)
+            zt = int(lab.get("zt") or 0)
+            if not _keep_watch_theme(phase, height, zt, lab.get("role") or "", b):
+                continue
+            slot = node(lab["theme"], phase)
+            slot["height"] = max(slot["height"], height)
+            slot["zt"] = max(slot["zt"], zt)
+            slot["leaders"].append({
                 "code": r["code"], "name": r["name"], "board": b,
             })
     for kind, items in (("first", first), ("second", second)):
         for it in items:
-            if not it.get("theme"):
+            slot = buckets.get(it.get("theme") or "")
+            if slot is None:
                 continue
-            node(it["theme"], it.get("phase") or "")[kind].append({
+            slot[kind].append({
                 "code": it["code"], "name": it["name"], "prob": it["prob"],
             })
     out = []
     for g in buckets.values():
-        g["leaders"] = sorted(g["leaders"], key=lambda x: -x["board"])[:6]
-        if not g["leaders"] and not g["first"] and not g["second"]:
+        if not g["leaders"]:
             continue
+        top = max(x["board"] for x in g["leaders"])
+        g["leaders"] = [x for x in g["leaders"] if x["board"] == top]
         out.append(g)
-    out.sort(key=lambda g: (-(g["leaders"][0]["board"] if g["leaders"] else 0), g["theme"]))
-    return out[:24]
+    order = {"高潮期": 0, "发酵期": 1, "启动期": 2, "分歧期": 3, "聚集未完成": 4}
+    out.sort(key=lambda g: (order.get(g["phase"], 9), -g["leaders"][0]["board"]))
+    return out
 
 
 def _pack(tgt: pd.DataFrame, top: int, zt_map, zb_map, fund_map,
