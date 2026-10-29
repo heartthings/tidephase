@@ -14,8 +14,8 @@ L2 逻辑回归分别估计
   - 标签与特征均按相邻交易日计算；停牌/无量的 T+1 不计入
   - 题材用开盘啦 stock_sector_map（801 开头），按当天有效区间取值，不用之后才出现的归属。
     父子板块来自开盘啦 SonPlate：股票落在子板块上写成「父 / 分支」
-  - 首板候选不选过往龙头。只留：前期缩量后连续放量，或急跌之后，
-    并且放量上影还在放大，同时落在风口题材上
+  - 首板候选不选还没回调的过往龙头。只留：前期缩量后连续放量，或急跌之后，
+    并且放量上影还在放大；或者曾经连板、随后连续下跌跌出空间。都要落在风口题材上
 
 不依赖 sklearn：numpy 手写 Adam + 标准化，概率由逻辑回归直接给出。
 
@@ -197,6 +197,7 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
         df[f"cum{w}"] = g["pct"].transform(
             lambda x, w=w: x.rolling(w, min_periods=w).sum())
     df["hi60"] = g["high"].transform(lambda x: x.rolling(60, min_periods=60).max())
+    df["hi20"] = g["high"].transform(lambda x: x.rolling(20, min_periods=10).max())
     df["lo60"] = g["low"].transform(lambda x: x.rolling(60, min_periods=60).min())
     df["recent_zt20"] = g["is_lu"].transform(
         lambda x: x.shift(1).rolling(20, min_periods=20).sum())
@@ -207,6 +208,7 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
     df["amp"] = (df["high"] - df["low"]) / df["close"] * 100
     df["gap_open"] = (df["open"] / g["close"].shift(1) - 1) * 100
     df["dist_hi60"] = (df["close"] / df["hi60"] - 1) * 100
+    df["dist_hi20"] = (df["close"] / df["hi20"] - 1) * 100
     df["dist_lo60"] = (df["close"] / df["lo60"] - 1) * 100
     df["is_20cm"] = df["code"].str.startswith(("sz30", "sh68")).astype(int)
     df["is_sealed"] = (df["close"] >= df["high"] - 1e-6).astype(int)
@@ -231,7 +233,16 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
     max_board60 = g["board_days"].transform(
         lambda x: x.shift(1).rolling(60, min_periods=1).max())
     df["old_dragon"] = (df["recent_zt20"].fillna(0) >= 2) | (max_board60.fillna(0) >= 3)
-    df["pattern_ok"] = (
+    # 连板之后连续下跌、离近 20 日高点至少 15%，空间已经跌出来。题材仍在风口时可以再进一板。
+    pct1 = g["pct"].shift(1)
+    pct2 = g["pct"].shift(2)
+    df["space_pullback"] = (
+        df["old_dragon"].fillna(False)
+        & (df["pct"] < 0) & (pct1 < 0) & (pct2 < 0)
+        & (df["cum3"] <= -8)
+        & (df["dist_hi20"] <= -15)
+    )
+    fresh = (
         (~df["old_dragon"].fillna(False))
         & df["shadow_cont"].fillna(False)
         & (
@@ -239,11 +250,11 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
             | df["crash"].fillna(False)
         )
     )
+    df["pattern_ok"] = fresh | df["space_pullback"].fillna(False)
     df["pattern_kind"] = ""
-    crash_hit = df["pattern_ok"] & df["crash"].fillna(False)
-    shrink_hit = df["pattern_ok"] & ~crash_hit
-    df.loc[crash_hit, "pattern_kind"] = "急跌后放量上影"
-    df.loc[shrink_hit, "pattern_kind"] = "缩量后连续放量上影"
+    df.loc[fresh & df["crash"].fillna(False), "pattern_kind"] = "急跌后放量上影"
+    df.loc[fresh & ~df["crash"].fillna(False) & df["pattern_ok"], "pattern_kind"] = "缩量后连续放量上影"
+    df.loc[df["space_pullback"].fillna(False), "pattern_kind"] = "连板后连续下跌跌出空间"
 
     # 市场宽度
     mkt = df.groupby("date").agg(
@@ -1327,7 +1338,7 @@ def render_markdown(r: dict) -> str:
         ("second_board", "二板候选（今日首板 → 明日二板）",
          "二板是“题材发酵确认”，概率来自首板同日条件；开盘一致性兑现，别在跳空上追。"),
         ("first_board", "首板候选（今日未涨停 → 明日首板）",
-         "只留前期缩量后连续放量，或急跌之后放量上影还在放大，并且落在风口题材上的票。过往龙头、反包不进这个名单。"),
+         "只留前期缩量后连续放量，或急跌之后放量上影还在放大，并且落在风口题材上的票。还没回调的过往龙头不进。连板之后已经连续下跌、离近20日高点至少15%的，题材还在风口上就留。"),
     ):
         lines.append(f"\n### {title}\n")
         lines.append(f"_{note}_\n")
