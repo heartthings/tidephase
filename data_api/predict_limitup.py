@@ -84,25 +84,36 @@ def _query(conn, sql: str, params=None) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=cols)
 
 
-def load_history(conn, start: str) -> pd.DataFrame:
-    df = _query(conn, """
+def load_history(conn, start: str, end: str | None = None) -> pd.DataFrame:
+    sql = """
         SELECT date, code, name, open, high, low, close, pct, volume, amount, circ_mv,
                is_st, is_suspended
         FROM stock_daily
         WHERE date >= %s AND (code LIKE 'sh%%' OR code LIKE 'sz%%') AND close > 0
-        ORDER BY code, date
-    """, [start])
+    """
+    params = [start]
+    if end:
+        sql += " AND date <= %s"
+        params.append(end)
+    sql += " ORDER BY code, date"
+    df = _query(conn, sql, params)
     df["date"] = pd.to_datetime(df["date"]).dt.date
     for c in ("open", "high", "low", "close", "pct", "volume"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
 
-def load_index(conn, start: str) -> pd.DataFrame:
-    df = _query(conn, """
+def load_index(conn, start: str, end: str | None = None) -> pd.DataFrame:
+    sql = """
         SELECT date, pct, close FROM index_daily
-        WHERE code = 'sh000001' AND date >= %s ORDER BY date
-    """, [start])
+        WHERE code = 'sh000001' AND date >= %s
+    """
+    params = [start]
+    if end:
+        sql += " AND date <= %s"
+        params.append(end)
+    sql += " ORDER BY date"
+    df = _query(conn, sql, params)
     df["date"] = pd.to_datetime(df["date"]).dt.date
     df["pct"] = pd.to_numeric(df["pct"], errors="coerce")
     return df
@@ -856,10 +867,12 @@ def predict(conn, target_date: Optional[date] = None,
             target_date = target_date.date()
 
     start = (target_date - timedelta(days=460)).isoformat()
-    df = load_history(conn, start)
+    end = target_date.isoformat()
+    # 历史回放只看到基准日收盘，不把之后的涨停拿来训练
+    df = load_history(conn, start, end)
     if df.empty:
         raise RuntimeError("stock_daily 无数据")
-    idx = load_index(conn, start)
+    idx = load_index(conn, start, end)
     themes = load_themes(conn)
     df = build_features(df, idx, themes)
 
@@ -942,6 +955,7 @@ def predict(conn, target_date: Optional[date] = None,
             f"二板模型 AUC {auc2}，排序仍然弱于首板。名单已按形态和风口过滤，不按老龙反包来排"
         )
     watchlist = _watchlist(mem, stats, tree, df, zt_today, target_date, first, second)
+    live_track = _live_track(conn)
 
     return {
         "as_of": str(target_date),
@@ -964,7 +978,57 @@ def predict(conn, target_date: Optional[date] = None,
         },
         "gaps": gaps,
         "watchlist": watchlist,
+        "live_track": live_track,
     }
+
+
+def _live_track(conn, days: int = 20) -> dict:
+    """读 prediction/reflection 里首板二板的近期兑现，供简报引用。"""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT category,
+                       count(*) FILTER (WHERE result='hit'),
+                       count(*) FILTER (WHERE result='miss'),
+                       count(*) FILTER (WHERE result='pending')
+                FROM prediction
+                WHERE category IN ('first_board', 'second_board')
+                  AND check_date >= CURRENT_DATE - %s
+                GROUP BY category
+                """,
+                (days,),
+            )
+            by_cat = [
+                {"category": r[0], "hits": r[1], "misses": r[2], "pending": r[3]}
+                for r in cur.fetchall()
+            ]
+            cur.execute(
+                """
+                SELECT p.check_date::text, p.falsify->>'name', p.confidence_pct,
+                       p.result, r.lesson_text
+                FROM prediction p
+                LEFT JOIN LATERAL (
+                    SELECT lesson_text FROM reflection
+                    WHERE decision_id = p.prediction_id
+                    ORDER BY created_at DESC LIMIT 1
+                ) r ON true
+                WHERE p.category IN ('first_board', 'second_board')
+                  AND p.result IN ('hit', 'miss')
+                  AND p.check_date >= CURRENT_DATE - %s
+                ORDER BY p.check_date DESC, p.confidence_pct DESC
+                LIMIT 12
+                """,
+                (days,),
+            )
+            recent = [
+                {"check_date": r[0], "name": r[1], "prob": r[2],
+                 "result": r[3], "lesson": r[4]}
+                for r in cur.fetchall()
+            ]
+        return {"window_days": days, "by_category": by_cat, "recent": recent}
+    except Exception:
+        return {"window_days": days, "by_category": [], "recent": []}
 
 
 def _labels_for(mem: pd.DataFrame, stats: dict, tree: dict) -> dict:
@@ -1217,13 +1281,18 @@ def _data_gaps(df, zt_today, d, themes, fund) -> List[str]:
         gaps.append("stock_daily.amount 历史缺失，成交额未参与模型")
     if not themes.empty:
         start = themes["effective_from"].min()
-        gaps.append(
-            f"{start} 之前没有开盘啦归属，那些日子题材特征记 0，不用后来才出现的映射"
-        )
-    gaps.append(
-        "2026-10-08 之前没有逐日流通市值，那些日子用该股第一次观测到的流通市值，不用之后更新的值"
-    )
-    gaps.append("北向买卖额交易所已停更，库里没有公开序列，没有用别的数代替")
+        if d < start:
+            gaps.append(f"{d} 当天没有开盘啦题材快照，这一天的题材按空处理")
+    # 流通市值：有逐日值用逐日；回填脚本 tools/backfill_circ_mv.py 在补 2026-10-08 之前
+    pre = df.loc[df["date"] < date(2026, 10, 8)]
+    if len(pre):
+        cover = pre.assign(_ok=pre["circ_mv"].fillna(0) > 0).groupby("date")["_ok"].mean()
+        missing_mv_days = int((cover < 0.5).sum())
+        if missing_mv_days:
+            gaps.append(
+                f"仍有约 {missing_mv_days} 个交易日流通市值未回填完；"
+                f"那些日子暂用该股第一次观测到的流通市值"
+            )
     gaps.append("没有讨论区原文。人气用 theme_heat 里的同花顺热股和热概念，不另编热度")
     if fund is not None and len(fund) < 1000:
         gaps.append(f"{d} fund_flow_stock 只有 {len(fund)} 条，个股资金流不完整")
@@ -1307,6 +1376,28 @@ def render_markdown(r: dict) -> str:
         if rc:
             tbl = " / ".join(f"{x['rank']}名 {x['rate']}%" for x in rc[:5])
             lines.append(f"  - 排名命中率：{tbl}")
+    live = r.get("live_track") or {}
+    if live.get("by_category"):
+        lines.append("\n### 近期预测兑现（落库核对）\n")
+        for row in live["by_category"]:
+            total = (row.get("hits") or 0) + (row.get("misses") or 0)
+            rate = f"{row['hits'] / total * 100:.1f}%" if total else "—"
+            label = "首板" if row["category"] == "first_board" else "二板"
+            lines.append(
+                f"- {label}：命中 {row.get('hits', 0)} / 未中 {row.get('misses', 0)}"
+                f"（兑现率 {rate}），待验 {row.get('pending', 0)}"
+            )
+        for item in (live.get("recent") or [])[:8]:
+            mark = "中" if item.get("result") == "hit" else "未中"
+            lesson = item.get("lesson") or ""
+            if lesson and item.get("result") == "miss":
+                lesson = f"｜反思：{lesson[:60]}"
+            else:
+                lesson = ""
+            lines.append(
+                f"- {item.get('check_date')} {item.get('name')} "
+                f"{item.get('prob')}% → **{mark}**{lesson}"
+            )
     for g in r["gaps"]:
         lines.append(f"- 缺口：{g}")
     lines.append("\n_概率是历史条件频率的估计，不是承诺；不构成投资建议，不荐股。_")

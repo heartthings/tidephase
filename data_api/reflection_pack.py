@@ -46,7 +46,8 @@ DEFAULT_ROUTE_MAP = {
         {"match": "sector.main_net_inflow", "table": "sector_daily", "column": "main_net_inflow", "dim": "sector_name"},
         {"match": "fund_flow_sector.main_net_inflow", "table": "fund_flow_sector", "column": "main_net_inflow", "dim": "sector_name"},
         {"match": "global.pct", "table": "global_daily", "column": "pct", "dim": "code"},
-        {"match": "northbound.total_net", "table": "northbound_daily", "column": "total_net", "dim": None},
+        # 北向净买额 2024-08-19 起停更，不再路由
+
         {"match": "margin.margin_bal", "table": "margin_daily", "column": "margin_bal", "dim": None},
         {"match": "fund_flow_stock.main_net_inflow", "table": "fund_flow_stock", "column": "main_net_inflow", "dim": "code"},
         {"match": "dragon_tiger", "table": "dt_pool", "column": "amount", "dim": "code",
