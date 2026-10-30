@@ -270,11 +270,107 @@ def pack(day: str | None) -> dict:
             "day": day_shape,
             "intraday": intra,
         })
+    cur.execute(
+        """
+        SELECT z.code, coalesce(z.name, ''), z.industry, z.pct, z.first_seal_time::text,
+               z.break_times, z.board_days, d.circ_mv
+        FROM dt_pool z
+        LEFT JOIN stock_daily d ON d.code = z.code AND d.date = z.date
+        WHERE z.date = %s
+        ORDER BY z.code
+        """,
+        (day,),
+    )
+    dt_rows = cur.fetchall()
+    dt_codes = [r[0] for r in dt_rows]
+    dt_bars: dict[str, list] = {c: [] for c in dt_codes}
+    dt_minutes: dict[str, list] = {c: [] for c in dt_codes}
+    dt_themes: dict[str, list] = {c: [] for c in dt_codes}
+    prior_lu: dict[str, list] = {c: [] for c in dt_codes}
+    if dt_codes:
+        cur.execute(
+            """
+            SELECT code, sector_name FROM stock_sector_map
+            WHERE kind = 'theme' AND sector_code ~ '^801' AND code = ANY(%s)
+              AND effective_from <= %s AND (effective_to IS NULL OR effective_to > %s)
+            ORDER BY code, sector_name
+            """,
+            (dt_codes, day, day),
+        )
+        for code, name in cur.fetchall():
+            dt_themes.setdefault(code, []).append(name)
+        cur.execute(
+            """
+            SELECT code, date::text, pct, open, high, low, close, volume
+            FROM stock_daily
+            WHERE code = ANY(%s) AND date <= %s AND date >= %s::date - 40
+            ORDER BY code, date
+            """,
+            (dt_codes, day, day),
+        )
+        for code, d, pct, open_, high, low, close, volume in cur.fetchall():
+            dt_bars.setdefault(code, []).append({
+                "date": d, "pct": pct, "open": open_, "high": high,
+                "low": low, "close": close, "volume": volume,
+            })
+        cur.execute(
+            """
+            SELECT code, to_char(ts AT TIME ZONE 'Asia/Shanghai', 'HH24:MI'),
+                   vol, amount, price, avg_price
+            FROM stock_minute
+            WHERE code = ANY(%s) AND freq = '1m'
+              AND ts >= %s::date AND ts < %s::date + 1
+            ORDER BY code, ts
+            """,
+            (dt_codes, day, day),
+        )
+        for code, hhmm, vol, amount, price, avg in cur.fetchall():
+            dt_minutes.setdefault(code, []).append((hhmm, vol, amount, price, avg))
+        cur.execute(
+            """
+            SELECT code, date::text FROM zt_pool
+            WHERE code = ANY(%s) AND date < %s AND date >= %s::date - 20
+            ORDER BY code, date
+            """,
+            (dt_codes, day, day),
+        )
+        for code, d in cur.fetchall():
+            prior_lu.setdefault(code, []).append(d)
+    limit_downs = []
+    for code, name, industry, pct, first_seal, breaks, board_days, circ in dt_rows:
+        series = dt_bars.get(code, [])
+        recent = []
+        for i, bar in enumerate(series[-6:]):
+            idx = len(series) - len(series[-6:]) + i
+            prev = [b["volume"] for b in series[max(0, idx - 5):idx] if b["volume"]]
+            ratio = None
+            if prev and bar["volume"]:
+                ratio = round(bar["volume"] / (sum(prev) / len(prev)), 2)
+            recent.append({
+                "date": bar["date"],
+                "pct": None if bar["pct"] is None else round(float(bar["pct"]), 2),
+                "vol_ratio": ratio,
+            })
+        limit_downs.append({
+            "code": code,
+            "name": name,
+            "industry": industry or "",
+            "pct": None if pct is None else round(float(pct), 2),
+            "circ_mv_yi": None if circ is None else round(float(circ), 2),
+            "first_seal_time": first_seal,
+            "break_times": breaks,
+            "board_days_cumulative": board_days,
+            "prior_limit_ups": prior_lu.get(code, []),
+            "themes": dt_themes.get(code, []),
+            "recent": recent,
+            "intraday": _intraday(dt_minutes.get(code, [])),
+        })
     existing = _existing(cur)
     conn.close()
     return {
         "as_of": day,
         "n": len(stocks),
+        "n_limit_down": len(limit_downs),
         "note": (
             "这些数字只是证据。合力还是主力要看同一题材有没有一批票一起封、日K是群体走势还是单票自己的路径，不按流通市值切。"
             "circ_mv_yi 只是市值，单位亿。volume_shift 是近10日里第一次放到1.5倍的日子。"
@@ -283,6 +379,7 @@ def pack(day: str | None) -> dict:
         ),
         "existing_iterative": existing,
         "stocks": stocks,
+        "limit_downs": limit_downs,
     }
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把预测结果画成两张图：风向个股一张，可能的一板和二板合成一张。"""
+"""把预测结果画成三张图：风向个股、可能的一板、可能的二板。"""
 from __future__ import annotations
 
 import sys
@@ -27,13 +27,18 @@ PILL = (24, 48, 36)
 
 LEADERS = (
     "风向个股",
-    "只留启动、发酵、高潮，以及已经有 2 板且今天至少 3 只涨停的聚集。每条只看最高那只。",
+    "开始聚焦（当天至少 2 只涨停）也留。每条只看最高那只，用来看题材还能不能延续。",
     (("leaders", None),),
 )
-BOARDS = (
-    "可能的一板 / 二板",
-    "上半是一板：前期缩量后连续放量，或急跌之后放量上影还在放大，并且踩在风口上。下半是二板：今天的首板里，明天有机会连上的。右边是历史晋级率，不是必涨。",
-    (("first", "一板"), ("second", "二板")),
+FIRST = (
+    "可能的一板",
+    "提前埋伏。买在分歧，卖在一致。题材还在聚集、正在分歧，或刚启动。发酵和高潮不在这张图里。右边是历史晋级率。",
+    (("first", None),),
+)
+SECOND = (
+    "可能的二板",
+    "接力。只留题材还可能延续的：开始聚焦、启动、发酵。高潮是一致兑现，不接力。右边是历史晋级率。",
+    (("second", None),),
 )
 
 
@@ -54,9 +59,18 @@ def _extra(kind, it) -> str:
 
 
 def _sections(result, kind):
+    if kind == "first":
+        groups = (result.get("first_board") or {}).get("groups") or []
+        item_key = "candidates"
+    elif kind == "second":
+        groups = (result.get("second_board") or {}).get("groups") or []
+        item_key = "candidates"
+    else:
+        groups = result.get("watchlist") or []
+        item_key = "leaders"
     rows = []
-    for g in result.get("watchlist") or []:
-        items = g.get(kind) or []
+    for g in groups:
+        items = g.get(item_key) or []
         if not items:
             continue
         rows.append((f"{g.get('theme') or '未归属'}    {g.get('phase') or ''}".strip(), items))
@@ -158,13 +172,14 @@ def render_images(result: dict, out_dir: Path | None = None) -> list[Path]:
     base = out_dir or OUT_DIR
     sheets = (
         (*LEADERS, f"watchlist_{day}_leaders.png"),
-        (*BOARDS, f"watchlist_{day}_boards.png"),
+        (*FIRST, f"watchlist_{day}_first.png"),
+        (*SECOND, f"watchlist_{day}_second.png"),
     )
     return [_draw_one(result, title, note, parts, base / name) for title, note, parts, name in sheets]
 
 
 def render_three(result: dict, out_dir: Path | None = None) -> list[Path]:
-    """兼容旧调用。现在只出两张：风向个股，以及一板和二板合成的一张。"""
+    """兼容旧调用。现在出三张：风向个股、可能的一板、可能的二板。"""
     return render_images(result, out_dir)
 
 

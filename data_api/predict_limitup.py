@@ -14,8 +14,9 @@ L2 逻辑回归分别估计
   - 标签与特征均按相邻交易日计算；停牌/无量的 T+1 不计入
   - 题材用开盘啦 stock_sector_map（801 开头），按当天有效区间取值，不用之后才出现的归属。
     父子板块来自开盘啦 SonPlate：股票落在子板块上写成「父 / 分支」
-  - 首板候选不选还没回调的过往龙头。只留：前期缩量后连续放量，或急跌之后，
-    并且放量上影还在放大；或者曾经连板、随后连续下跌跌出空间。都要落在风口题材上
+  - 首板是提前埋伏：买在分歧，卖在一致。题材还在聚集、正在分歧，或刚启动才留；
+    发酵和高潮是兑现，不进首板。形态仍是缩量后连续放量、急跌后放量上影、连板后跌出空间，
+    或题材还没热、同板块一起放量。二板是接力：只留题材还可能延续的阶段，高潮不接力
 
 不依赖 sklearn：numpy 手写 Adam + 标准化，概率由逻辑回归直接给出。
 
@@ -243,8 +244,7 @@ def build_features(df: pd.DataFrame, idx: pd.DataFrame, themes: pd.DataFrame) ->
         & (df["dist_hi20"] <= -15)
     )
     fresh = (
-        (~df["old_dragon"].fillna(False))
-        & df["shadow_cont"].fillna(False)
+        df["shadow_cont"].fillna(False)
         & (
             (df["shrink"].fillna(False) & df["burst3"].fillna(False))
             | df["crash"].fillna(False)
@@ -346,7 +346,10 @@ def _attach_theme_stats(df: pd.DataFrame, themes: pd.DataFrame) -> pd.DataFrame:
               "theme_name": "", "theme_code": ""})
 
 
-HOT_PHASES = {"聚集未完成", "启动期", "发酵期", "高潮期"}
+# 一板埋伏：还没热，或已经分歧。发酵、高潮是题材热了之后的兑现。
+AMBUSH_PHASES = {"聚集未完成", "分歧期", "启动期"}
+# 二板接力：题材还可能延续。高潮是一致，分歧是延续断了。
+RELAY_PHASES = {"聚集未完成", "启动期", "发酵期"}
 # 这些是身份或事件标签，涨停家数会很大，但不能当成舞台本身。
 POCKET_THEMES = {
     "业绩增长", "中报增长", "三季报增长", "年报增长", "预盈预增",
@@ -923,9 +926,30 @@ def predict(conn, target_date: Optional[date] = None,
     hot_parents = {sec: node["name"] for sec, node in stats.items() if node.get("zt", 0) >= 3}
     tree = load_plate_tree(hot_parents)
     labels = _labels_for(mem, stats, tree)
+    stirred = _stirred_themes(df, mem, stats, target_date)
+    tags = {}
+    if mem is not None and len(mem):
+        for code, g in mem.groupby("code"):
+            tags[code] = g["sector_code"].tolist()
 
-    tgt1 = _screen(tgt1, df, labels, "first")
+    tgt1 = _screen(tgt1, df, labels, "first", stirred, tags)
     tgt2 = _screen(tgt2, df, labels, "second")
+    if tgt1 is not None and len(tgt1):
+        # 每个还没热的题材最多留两只放量最清楚的，避免一个大标签占满名单。
+        rot_mask = tgt1["pattern_kind"].fillna("").str.startswith("题材刚异动")
+        rot_all = tgt1[rot_mask]
+        parts = []
+        for sec in sorted(stirred, key=lambda s: -stirred[s]["rate"]):
+            sub = rot_all[rot_all["rot_code"] == sec]
+            if sub.empty:
+                continue
+            parts.append(sub.sort_values("vol_ratio5", ascending=False).head(2))
+            if sum(len(p) for p in parts) >= 6:
+                break
+        rot = pd.concat(parts).head(6) if parts else rot_all.iloc[0:0]
+        pat = tgt1[~rot_mask].sort_values("score_raw", ascending=False)
+        pat = pat[~pat["code"].isin(set(rot["code"]))].head(max(top_first - len(rot), 0))
+        tgt1 = pd.concat([pat, rot])
     first = _pack(tgt1, top_first, zt_map, zb_map, fund_map, labels, "first")
     second = _pack(tgt2, top_second, zt_map, zb_map, fund_map, labels, "second")
 
@@ -963,7 +987,7 @@ def predict(conn, target_date: Optional[date] = None,
     auc2 = (ev2 or {}).get("auc")
     if auc2 is not None and auc2 < 0.65:
         gaps.append(
-            f"二板模型 AUC {auc2}，排序仍然弱于首板。名单已按形态和风口过滤，不按老龙反包来排"
+            f"二板模型 AUC {auc2}，排序仍然弱于首板。二板只留题材还在延续的阶段"
         )
     watchlist = _watchlist(mem, stats, tree, df, zt_today, target_date, first, second)
     live_track = _live_track(conn)
@@ -993,6 +1017,129 @@ def predict(conn, target_date: Optional[date] = None,
     }
 
 
+def _theme_leaf(theme: str) -> str:
+    t = (theme or "").replace("（父题材）", "").strip()
+    if " / " in t:
+        t = t.split(" / ")[-1].strip()
+    return t
+
+
+def _fulfillment_tape(conn, code: str, theme: str, check_date: str, result: str) -> str:
+    """兑现反思：题材持续度 + 近几日 K 线 + 兑现日分时。不编消息。"""
+    if not code or not check_date:
+        return ""
+    leaf = _theme_leaf(theme)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT date::text, pct, volume
+                FROM stock_daily
+                WHERE code=%s AND date <= %s
+                ORDER BY date DESC LIMIT 6
+                """,
+                (code, check_date),
+            )
+            bars = list(reversed(cur.fetchall()))
+            cur.execute(
+                """
+                SELECT to_char(ts, 'HH24:MI'), amount, price
+                FROM stock_minute
+                WHERE code=%s AND freq='1m'
+                  AND ts >= %s::timestamp AND ts < %s::timestamp + interval '1 day'
+                  AND to_char(ts, 'HH24:MI') >= '09:33'
+                ORDER BY amount DESC NULLS LAST
+                LIMIT 1
+                """,
+                (code, check_date, check_date),
+            )
+            top = cur.fetchone()
+            cur.execute(
+                """
+                SELECT sum(amount),
+                       (array_agg(price ORDER BY ts DESC))[1]
+                FROM stock_minute
+                WHERE code=%s AND freq='1m'
+                  AND ts >= %s::timestamp AND ts < %s::timestamp + interval '1 day'
+                """,
+                (code, check_date, check_date),
+            )
+            tot = cur.fetchone()
+            series = []
+            if leaf:
+                cur.execute(
+                    """
+                    SELECT z.date::text, count(DISTINCT z.code)
+                    FROM zt_pool z
+                    JOIN stock_sector_map m ON m.code = z.code
+                    WHERE m.kind='theme' AND m.effective_to IS NULL
+                      AND m.sector_name=%s
+                      AND z.date <= %s AND z.date >= %s::date - 15
+                    GROUP BY 1 ORDER BY 1
+                    """,
+                    (leaf, check_date, check_date),
+                )
+                series = cur.fetchall()
+    except Exception:
+        return ""
+    parts = []
+    if len(bars) >= 2:
+        path = "、".join(
+            f"{str(b[0])[5:]}{float(b[1]):+.1f}%" for b in bars[-5:] if b[1] is not None
+        )
+        vols = [float(b[2]) for b in bars if b[2]]
+        vol_txt = ""
+        if len(vols) >= 3 and vols[-2] > 0:
+            ratio = vols[-1] / (sum(vols[:-1]) / (len(vols) - 1))
+            if ratio >= 1.5:
+                vol_txt = "兑现日量能放出来了"
+            elif ratio <= 0.8:
+                vol_txt = "兑现日量是缩的"
+            else:
+                vol_txt = "兑现日量能平平"
+        if path:
+            parts.append(f"近几日 {path}" + (f"，{vol_txt}" if vol_txt else ""))
+    if top and top[1] and tot and tot[0]:
+        share = float(top[1]) / float(tot[0]) * 100
+        after = ""
+        if top[2] and tot[1]:
+            move = (float(tot[1]) / float(top[2]) - 1) * 100
+            after = "那之后价格还在抬" if move >= 1 else (
+                "那之后价格吐回去了" if move <= -1 else "那之后价格钉住"
+            )
+            after = f"{after}（{move:+.1f}%）"
+        parts.append(f"分时成交堆在 {top[0]}（约占全日 {share:.0f}%）{after}")
+    zt_now = zt_prev = None
+    if series:
+        zt_now = int(series[-1][1]) if str(series[-1][0]) == str(check_date) else 0
+        if len(series) >= 2 and str(series[-1][0]) == str(check_date):
+            zt_prev = int(series[-2][1])
+        elif series and str(series[-1][0]) != str(check_date):
+            zt_prev = int(series[-1][1])
+            zt_now = 0
+    if leaf and zt_now is not None:
+        if zt_prev is None:
+            cont = f"题材{leaf}兑现日涨停 {zt_now} 只"
+        elif zt_now > zt_prev:
+            cont = f"题材{leaf}涨停从 {zt_prev} 只增到 {zt_now} 只，持续度还在"
+        elif zt_now < zt_prev:
+            cont = f"题材{leaf}涨停从 {zt_prev} 只落到 {zt_now} 只，持续度接不住"
+        else:
+            cont = f"题材{leaf}涨停停在 {zt_now} 只，持续度没有再扩张"
+        parts.append(cont)
+    if result == "hit" and zt_now is not None and zt_prev is not None and zt_now >= zt_prev:
+        parts.append("这只顺着题材还在的时候把板封住了")
+    elif result == "hit":
+        parts.append("个股封住了，题材的高度要单独再看还在不在")
+    elif zt_now is not None and zt_prev is not None and zt_now < zt_prev:
+        parts.append("没封住，先是题材持续度断了")
+    elif any("吐回去" in p for p in parts):
+        parts.append("题材还在，但这只分时把放出来的量吐回去了，板没封上")
+    elif any("量是缩的" in p for p in parts):
+        parts.append("量没放出来，封板的前提当天就不在")
+    return "。".join(parts) + ("。" if parts else "")
+
+
 def _live_track(conn, days: int = 20) -> dict:
     """读 prediction/reflection 里首板二板的近期兑现，供简报引用。"""
     try:
@@ -1017,7 +1164,7 @@ def _live_track(conn, days: int = 20) -> dict:
             cur.execute(
                 """
                 SELECT p.check_date::text, p.falsify->>'name', p.confidence_pct,
-                       p.result, r.lesson_text
+                       p.result, r.lesson_text, p.falsify->>'code', p.falsify->>'theme'
                 FROM prediction p
                 LEFT JOIN LATERAL (
                     SELECT lesson_text FROM reflection
@@ -1032,11 +1179,20 @@ def _live_track(conn, days: int = 20) -> dict:
                 """,
                 (days,),
             )
-            recent = [
-                {"check_date": r[0], "name": r[1], "prob": r[2],
-                 "result": r[3], "lesson": r[4]}
-                for r in cur.fetchall()
-            ]
+            rows = cur.fetchall()
+        recent = []
+        taped = 0
+        for r in rows:
+            item = {
+                "check_date": r[0], "name": r[1], "prob": r[2],
+                "result": r[3], "lesson": r[4], "code": r[5], "theme": r[6],
+                "tape": "",
+            }
+            prob = r[2] or 0
+            if taped < 6 and (r[3] == "hit" or prob >= 10):
+                item["tape"] = _fulfillment_tape(conn, r[5], r[6], r[0], r[3])
+                taped += 1
+            recent.append(item)
         return {"window_days": days, "by_category": by_cat, "recent": recent}
     except Exception:
         return {"window_days": days, "by_category": [], "recent": []}
@@ -1051,23 +1207,106 @@ def _labels_for(mem: pd.DataFrame, stats: dict, tree: dict) -> dict:
     return labels
 
 
-def _screen(tgt: pd.DataFrame, df: pd.DataFrame, labels: dict, kind: str) -> pd.DataFrame:
+def _stirred_themes(df: pd.DataFrame, mem: pd.DataFrame, stats: dict, d: date) -> dict:
+    """题材热度还没起来，但成员当天一起放量。
+
+    投机情绪里一板常常不从昨天已经启动、发酵、高潮的题材里出来，一天换一个方向。
+    痕迹是：高度还不到 3 板，这只和同板块里至少一批票量能放大、涨了但没封板。
+    成分太多的宽标签（超过 250 只）不拿来当这个板块。
+    """
+    day = df[df["date"] == d]
+    if day.empty or mem is None or mem.empty:
+        return {}
+    stir = day[
+        (~day["is_lu"].fillna(False))
+        & (day["pct"] >= 3)
+        & (day["vol_ratio5"] >= 1.5)
+    ]
+    mkt = len(stir) / max(len(day), 1)
+    joined = stir[["code"]].merge(mem[["code", "sector_code"]], on="code")
+    counts = joined.groupby("sector_code")["code"].nunique()
+    sizes = mem.groupby("sector_code")["code"].nunique()
+    out = {}
+    for sec, n in counts.items():
+        node = stats.get(sec) or {}
+        name = node.get("name") or ""
+        phase = node.get("phase") or ""
+        height = int(node.get("height") or 0)
+        if name in POCKET_THEMES:
+            continue
+        if phase in ("退潮 / 冰点", "无涨停", "启动期", "发酵期", "高潮期"):
+            continue
+        if height >= 3 or phase not in ("聚集未完成", "分歧期"):
+            continue
+        size = int(sizes.get(sec, 0) or 0)
+        n = int(n)
+        if n < 3 or not (12 <= size <= 250):
+            continue
+        rate = n / size
+        if rate < mkt * 1.12:
+            continue
+        out[sec] = {
+            "n": n, "rate": rate, "name": name,
+            "zt": int(node.get("zt") or 0),
+            "height": height,
+            "phase": phase,
+            "zt3": node.get("zt3") or [],
+        }
+    return out
+
+
+def _screen(tgt: pd.DataFrame, df: pd.DataFrame, labels: dict, kind: str,
+            stirred: Optional[dict] = None, tags: Optional[dict] = None) -> pd.DataFrame:
     if tgt is None or len(tgt) == 0:
         return tgt
-    flags = df.loc[tgt.index, ["pattern_ok", "old_dragon", "pattern_kind"]]
+    flags = df.loc[tgt.index, ["pattern_ok", "old_dragon", "pattern_kind",
+                               "pct", "vol_ratio5", "is_lu"]]
     out = tgt.copy()
     out["pattern_ok"] = flags["pattern_ok"].to_numpy()
     out["old_dragon"] = flags["old_dragon"].to_numpy()
     out["pattern_kind"] = flags["pattern_kind"].to_numpy()
-    if kind == "first":
-        out = out[out["pattern_ok"].fillna(False)]
-    else:
-        out = out[~out["old_dragon"].fillna(False)]
+    out["pct"] = flags["pct"].to_numpy()
+    out["vol_ratio5"] = flags["vol_ratio5"].to_numpy()
+    out["is_lu"] = flags["is_lu"].to_numpy()
+    out["rot_code"] = ""
+    out["rot_theme"] = ""
+    out["rot_phase"] = ""
+    out["rot_zt"] = 0
+    out["rot_height"] = 0
+    out["rot_zt3"] = pd.Series([None] * len(out), index=out.index, dtype=object)
+    stirred = stirred or {}
+    tags = tags or {}
+    if kind != "first":
+        keep = []
+        for idx, r in out.iterrows():
+            lab = labels.get(r["code"]) or {}
+            if lab.get("phase") in RELAY_PHASES:
+                keep.append(idx)
+        return out.loc[keep]
     keep = []
     for idx, r in out.iterrows():
         lab = labels.get(r["code"]) or {}
-        if lab.get("phase") in HOT_PHASES:
+        phase = lab.get("phase") or ""
+        pattern_ok = bool(r["pattern_ok"]) if pd.notna(r["pattern_ok"]) else False
+        if pattern_ok and phase in AMBUSH_PHASES:
             keep.append(idx)
+            continue
+        sealed = bool(r["is_lu"]) if pd.notna(r["is_lu"]) else False
+        if sealed or not (pd.notna(r["pct"]) and pd.notna(r["vol_ratio5"])
+                          and r["pct"] >= 3 and r["vol_ratio5"] >= 1.5):
+            continue
+        hit = [stirred[s] | {"code": s} for s in tags.get(r["code"], ()) if s in stirred]
+        if not hit:
+            continue
+        chosen = max(hit, key=lambda x: x["rate"])
+        out.at[idx, "rot_code"] = chosen["code"]
+        out.at[idx, "rot_theme"] = chosen["name"]
+        out.at[idx, "rot_phase"] = chosen["phase"]
+        out.at[idx, "rot_zt"] = chosen["zt"]
+        out.at[idx, "rot_height"] = chosen["height"]
+        out.at[idx, "rot_zt3"] = chosen.get("zt3") or []
+        out.at[idx, "pattern_kind"] = f"题材刚异动、同板块{chosen['n']}只一起放量"
+        keep.append(idx)
     return out.loc[keep]
 
 
@@ -1080,10 +1319,13 @@ def _keep_watch_theme(phase: str, height: int, zt: int, role: str, stock_board: 
     if stock_board >= 3:
         return True
     if role == "父题材":
-        return phase in ("启动期", "发酵期", "高潮期")
+        if phase in ("启动期", "发酵期", "高潮期"):
+            return True
+        return phase == "聚集未完成" and zt >= 2
     if phase in ("启动期", "发酵期", "高潮期"):
         return True
-    return phase == "聚集未完成" and height >= 2 and zt >= 3
+    # 开始聚焦：涨停家数已经在变多，高度还没起来。留最高那只，看题材能不能延续。
+    return phase == "聚集未完成" and zt >= 2
 
 
 def _watchlist(mem, stats, tree, df, zt_today, d, first, second) -> List[dict]:
@@ -1147,7 +1389,14 @@ def _pack(tgt: pd.DataFrame, top: int, zt_map, zb_map, fund_map,
         z = zt_map.get(code)
         zb = zb_map.get(code)
         f = fund_map.get(code)
-        lab = labels.get(code) or {}
+        lab = dict(labels.get(code) or {})
+        if kind == "first" and str(r.get("rot_theme") or ""):
+            lab["theme"] = r["rot_theme"]
+            lab["phase"] = r["rot_phase"] or lab.get("phase")
+            lab["zt"] = int(r["rot_zt"] or 0)
+            lab["height"] = int(r["rot_height"] or 0)
+            lab["zt3"] = r["rot_zt3"] if isinstance(r["rot_zt3"], list) else []
+            lab["role"] = ""
         theme = lab.get("theme") or ""
         reasons = _fmt_reason(r)
         if z is not None:
@@ -1336,9 +1585,9 @@ def render_markdown(r: dict) -> str:
 
     for key, title, note in (
         ("second_board", "二板候选（今日首板 → 明日二板）",
-         "二板是“题材发酵确认”，概率来自首板同日条件；开盘一致性兑现，别在跳空上追。"),
+         "二板是接力，看题材还有没有延续。只留开始聚焦、启动、发酵。高潮是一致兑现，不接力；分歧是延续断了，也不留。开盘一致性兑现，别在跳空上追。"),
         ("first_board", "首板候选（今日未涨停 → 明日首板）",
-         "只留前期缩量后连续放量，或急跌之后放量上影还在放大，并且落在风口题材上的票。还没回调的过往龙头不进。连板之后已经连续下跌、离近20日高点至少15%的，题材还在风口上就留。"),
+         "一板是提前埋伏。买在分歧，卖在一致。题材还在聚集、正在分歧，或刚启动才留；发酵和高潮不进。形态是缩量后连续放量、急跌后放量上影，或连板后跌出空间。还有一路是题材还没热、同板块一起放量。过往龙头不另做限制。"),
     ):
         lines.append(f"\n### {title}\n")
         lines.append(f"_{note}_\n")
@@ -1400,15 +1649,17 @@ def render_markdown(r: dict) -> str:
             )
         for item in (live.get("recent") or [])[:8]:
             mark = "中" if item.get("result") == "hit" else "未中"
-            lesson = item.get("lesson") or ""
-            if lesson and item.get("result") == "miss":
-                lesson = f"｜反思：{lesson[:60]}"
-            else:
-                lesson = ""
+            tape = item.get("tape") or ""
             lines.append(
                 f"- {item.get('check_date')} {item.get('name')} "
-                f"{item.get('prob')}% → **{mark}**{lesson}"
+                f"{item.get('prob')}% → **{mark}**"
             )
+            if tape:
+                lines.append(f"  - {tape}")
+            elif item.get("result") == "miss" and (item.get("prob") or 0) >= 10:
+                lesson = (item.get("lesson") or "")[:80]
+                if lesson:
+                    lines.append(f"  - {lesson}")
     for g in r["gaps"]:
         lines.append(f"- 缺口：{g}")
     lines.append("\n_概率是历史条件频率的估计，不是承诺；不构成投资建议，不荐股。_")
