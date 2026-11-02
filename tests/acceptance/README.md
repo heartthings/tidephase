@@ -10,7 +10,6 @@
 | 2 | `test_accuracy.py` | ② 准确性 | PG + stock_daily 有数据 + 网络可访问 akshare | 5-15 min（含限速等待） |
 | 3 | `test_timeliness.py` | ③ 时效 | PG + ingest_log 有记录（至少运行 1 天后） | <1 min |
 | 4 | `test_audit.py` | ⑤ 审计 | PG + raw 归档目录存在 | 1-3 min |
-| 5 | `docs/replay_witness_template.md` | ④ 回放见证 | 六案例数据面全部就绪（M3） | 人工见证 |
 
 ## 环境变量
 
@@ -20,14 +19,14 @@ export PG_HOST=127.0.0.1
 export PG_PORT=15432
 export PG_DB=market_tsdb
 export PG_USER=duser_reader
-export PG_PASS="从 configs/secrets.yaml 获取"
+export PG_PASS="从 configs/secrets.yaml 的 database.duser_reader_password 读取"
 
 # data-api（备用通道）
 export DATA_API_BASE=http://127.0.0.1:8787
-export DATA_API_TOKEN="从督军获取"
+export DATA_API_TOKEN="从 configs/secrets.yaml 的 api.bearer_token_read 读取"
 
 # raw 归档目录（审计追溯用）
-export RAW_ARCHIVE_ROOT=/home/hello/application/dev/market-datalayer/data/raw
+export RAW_ARCHIVE_ROOT=data/raw
 ```
 
 ## 依赖

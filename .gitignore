@@ -3,8 +3,15 @@ configs/secrets.yaml
 *.env
 .env
 
-# Raw data archive
+# Raw data archive and local run output
 data/raw/
+data/cache/
+data/*.log
+data/*.out
+
+# Editor and one-off backups
+*.bak
+*.bak_*
 
 # Frontend
 node_modules/

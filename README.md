@@ -41,8 +41,7 @@ market-datalayer/
 ├── ops/                      # docker-compose
 ├── configs/                  # rate_limits / validation_rules / secrets（不入 git）
 ├── tests/                    # 单元测试
-├── data/raw/                 # raw 归档（不入 git）
-└── reports/                  # 施工报告
+└── data/raw/                 # raw 归档（不入 git）
 ```
 
 ## 快速启动

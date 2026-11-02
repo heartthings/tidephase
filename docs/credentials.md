@@ -23,13 +23,12 @@
 
 ### 龙虎凭证
 
-| 账号 | 配置路径 | 状态 |
-|------|----------|------|
-| 3167791 | `longhu.account_3167791` | ✅ 实测 errcode=0 有效（Z7 T-R1 外置） |
-| 3965820 | `longhu.account_3965820` | ✅ 实测 errcode=0 有效（Z7 T-R1 外置） |
-| Emotion | `longhu.emotion_device_id` | ✅ 实测 errcode=0 有效（Z7 T-R1 外置） |
-| entrust_purchase | `longhu.entrust_purchase` | ✅ 实测 errcode=0 有效 |
-| theme_info | `longhu.theme_info_token` | ✅ 实测 errcode=0 有效 |
+| 用途 | 配置路径 |
+|------|----------|
+| 龙虎账号 | `longhu` 下各账号字段 |
+| 设备号 | `longhu.emotion_device_id` |
+| 委托 | `longhu.entrust_purchase` |
+| 题材 | `longhu.theme_info_token` |
 
 ### 龙虎限速（Z7 梁总 10-10 裁决）
 
@@ -47,7 +46,7 @@
 
 1. **严禁在文档中写明文 token**：只写配置路径和档位
 2. **严禁硬编码**：代码中必须从 `configs/secrets.yaml` 读取
-3. **已废弃**：`data-api-read-2026-market` 字符串已废弃（HTTP 401），请使用 `configs/secrets.yaml` 的 `api.bearer_token_read`
+3. 读接口使用 `configs/secrets.yaml` 的 `api.bearer_token_read`
 
 ## 读取方式
 
