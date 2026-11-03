@@ -5,13 +5,9 @@ description: Add, remove, or resize Tidephase (观势) boards on the pre-open, i
 
 # Board edit
 
-The canvas is one JSON document, version 1, with sessions `preopen`, `intraday`, and `afterclose`. Each board has `id`, `type`, `x`, `y`, `w`, `h`.
+The canvas is one JSON document, version 1, with sessions `preopen`, `intraday`, and `afterclose`. Each board has `id`, `type`, `x`, `y`, `w`, `h`. The screen lays boards on a fixed 12-column grid in reading order. `x`, `y`, `w`, and `h` are still stored and validated. The page does not use freeform dragging. Users show or hide a board from the 面板 menu.
 
-Allowed types:
-
-- preopen: `preopen-messages`, `overnight`
-- intraday: `market-radar`, `market-dynamics`
-- afterclose: `sentiment-dial`, `theme-stage`, `reason-check`, `money-flow`, `limit-cards`, `next-candidates`, `fulfillment`, `tomorrow-line`
+Allowed types are the ones in `dsh/spec/catalog.json` for that session.
 
 Read the current spec:
 

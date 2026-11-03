@@ -82,6 +82,31 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
     return map;
   }, {});
   const STAGES = ["聚集未完成", "启动", "发酵", "高潮", "分歧", "退潮"];
+  const PLACE = {
+    "preopen-messages": { span: 8, min: 420 },
+    "overnight": { span: 4, min: 260 },
+    "index-board": { span: 12, min: 108 },
+    "breadth-board": { span: 5, min: 260 },
+    "sentiment-dial": { span: 7, min: 132 },
+    "minute-board": { span: 8, min: 240 },
+    "hour-board": { span: 4, min: 240 },
+    "sector-board": { span: 7, min: 280 },
+    "leader-board": { span: 5, min: 280 },
+    "auction-board": { span: 4, min: 240 },
+    "news-board": { span: 4, min: 240 },
+    "market-radar": { span: 6, min: 300 },
+    "market-dynamics": { span: 6, min: 300 },
+    "wire-board": { span: 6, min: 220 },
+    "predict-board": { span: 6, min: 220 },
+    "coverage-board": { span: 12, min: 200 },
+    "theme-stage": { span: 8, min: 300 },
+    "tomorrow-line": { span: 4, min: 160 },
+    "money-flow": { span: 12, min: 200 },
+    "reason-check": { span: 6, min: 260 },
+    "limit-cards": { span: 6, min: 260 },
+    "next-candidates": { span: 8, min: 280 },
+    "fulfillment": { span: 4, min: 260 }
+  };
 
   const DEMO = {
     date: "2026-11-03",
@@ -298,16 +323,16 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   }
 
   function BoardPanel(props) {
-    const [session, setSession] = useState("afterclose");
+    const [session, setSession] = useState(sessionForNow);
     const [date, setDate] = useState(todayISO());
     const [spec, setSpec] = useState(DEFAULT_SPEC);
-    const [menu, setMenu] = useState(null);
+    const [picker, setPicker] = useState(false);
     const [narrow, setNarrow] = useState(window.innerWidth < 840);
     const [scheme, setScheme] = useState(initialScheme);
     const [payload, setPayload] = useState(DEMO);
     const [gaps, setGaps] = useState([]);
     const [usingDemo, setUsingDemo] = useState(true);
-    const dragRef = useRef(false);
+    const [updatedAt, setUpdatedAt] = useState("");
     const specRef = useRef(spec);
     specRef.current = spec;
 
@@ -329,9 +354,8 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
     useEffect(() => {
       let stop = false;
       const pull = () => {
-        if (dragRef.current) return;
         readJSON("/api/public/v1/boards/spec").then((body) => {
-          if (stop || dragRef.current || !body || !body.data) return;
+          if (stop || !body || !body.data) return;
           if (JSON.stringify(body.data) !== JSON.stringify(specRef.current)) setSpec(body.data);
         }).catch(() => {});
       };
@@ -354,6 +378,7 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
             Object.assign(next, body.data || {});
             (body.gaps || []).forEach((gap) => notes.push(gap));
           });
+          setUpdatedAt(clockNow());
           if (!live || Object.keys(next).length === 0) {
             setPayload(DEMO);
             setUsingDemo(true);
@@ -370,8 +395,9 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
       return () => { stop = true; window.clearInterval(timer); };
     }, [session, date]);
 
-    const boards = (spec.sessions[session] && spec.sessions[session].boards) || [];
-    const canvasHeight = Math.max(760, ...boards.map((board) => board.y + board.h + 48));
+    const boards = orderedBoards(session, (spec.sessions[session] && spec.sessions[session].boards) || []);
+    const shown = new Set(boards.map((board) => board.type));
+    const notes = gaps.filter((gap) => gap !== "当前使用示例数据");
 
     function commit(next) {
       setSpec(next);
@@ -384,57 +410,29 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
       }).catch(() => {});
     }
 
-    function patchBoard(id, change) {
+    function writeBoards(nextBoards) {
       commit({
         ...spec,
         sessions: {
           ...spec.sessions,
-          [session]: {
-            boards: boards.map((board) => board.id === id ? { ...board, ...change } : board)
-          }
+          [session]: { boards: nextBoards }
         }
       });
     }
 
-    function addBoard(type, x, y) {
-      const board = {
+    function toggleType(type) {
+      if (shown.has(type)) {
+        writeBoards(boards.filter((board) => board.type !== type));
+        return;
+      }
+      writeBoards(boards.concat({
         id: type + "-" + Date.now().toString(36),
         type: type,
-        x: Math.max(24, x),
-        y: Math.max(24, y),
-        w: type === "sentiment-dial" ? 980 : 420,
-        h: type === "sentiment-dial" ? 180 : 320
-      };
-      commit({
-        ...spec,
-        sessions: {
-          ...spec.sessions,
-          [session]: { boards: boards.concat(board) }
-        }
-      });
-      setMenu(null);
-    }
-
-    function removeBoard(id) {
-      commit({
-        ...spec,
-        sessions: {
-          ...spec.sessions,
-          [session]: { boards: boards.filter((board) => board.id !== id) }
-        }
-      });
-      setMenu(null);
-    }
-
-    function onCanvasMenu(event) {
-      event.preventDefault();
-      const rect = event.currentTarget.getBoundingClientRect();
-      setMenu({
-        x: event.clientX,
-        y: event.clientY,
-        dropX: event.clientX - rect.left + event.currentTarget.scrollLeft,
-        dropY: event.clientY - rect.top + event.currentTarget.scrollTop
-      });
+        x: 16,
+        y: 16,
+        w: 480,
+        h: 280
+      }));
     }
 
     function switchScheme(next) {
@@ -447,17 +445,19 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
       h("header", { className: "gs-top" },
         h("div", { className: "gs-brand" },
           h("strong", null, "观势"),
-          h("span", null, "仅 A 股")
+          h("span", null, "A股")
         ),
         h("nav", { className: "gs-tabs", "aria-label": "时段" }, SESSIONS.map((item) => h("button", {
           key: item.id,
           type: "button",
           className: session === item.id ? "is-on" : "",
-          onClick: () => setSession(item.id)
+          "aria-pressed": session === item.id,
+          onClick: () => { setSession(item.id); setPicker(false); }
         }, item.label))),
         h("input", {
           className: "gs-date",
           type: "date",
+          "aria-label": "交易日",
           value: date,
           onChange: (event) => setDate(event.target.value)
         }),
@@ -465,51 +465,99 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
           key: item,
           type: "button",
           className: scheme === item ? "is-on" : "",
+          "aria-pressed": scheme === item,
           onClick: () => switchScheme(item)
-        }, item === "light" ? "浅色" : "深色")))
+        }, item === "light" ? "浅色" : "深色"))),
+        h("div", { className: "gs-picker" },
+          h("button", {
+            type: "button",
+            className: picker ? "is-on" : "",
+            "aria-expanded": picker,
+            "aria-controls": "gs-panel-menu",
+            onClick: () => setPicker(!picker)
+          }, "面板"),
+          picker ? h("div", {
+            id: "gs-panel-menu",
+            className: "gs-menu",
+            role: "group",
+            "aria-label": "选择看板"
+          },
+            h("p", null, "当前时段显示这些看板"),
+            CATALOG[session].map((item) => h("button", {
+              key: item.type,
+              type: "button",
+              className: shown.has(item.type) ? "is-on" : "",
+              "aria-pressed": shown.has(item.type),
+              onClick: () => toggleType(item.type)
+            },
+              h("i", { "aria-hidden": "true" }, shown.has(item.type) ? "✓" : ""),
+              item.title
+            ))
+          ) : null
+        ),
+        h("p", { className: "gs-status" },
+          h("b", { className: usingDemo ? "is-demo" : "is-live" }, usingDemo ? "示例" : "实时"),
+          h("span", null, updatedAt ? "刷新 " + updatedAt : "等待接口"),
+          h("span", null, "数据会延迟，不是投资建议")
+        )
       ),
-      h("p", { className: "gs-risk" }, "数据会延迟，模型会说错。这不是投资建议。"),
-      usingDemo ? h("p", { className: "gs-gap" }, "示例数据已打开。接口恢复后会自动换成真实数据。") : null,
-      gaps.filter((gap) => gap !== "当前使用示例数据").map((gap) => h("p", { key: gap, className: "gs-gap" }, gap)),
-      h("div", {
-        className: narrow ? "gs-canvas is-narrow" : "gs-canvas",
-        style: narrow ? null : { height: canvasHeight },
-        onContextMenu: onCanvasMenu,
-        onClick: () => setMenu(null)
-      }, boards.map((board) => h(Frame, {
-        key: board.id,
-        board: board,
-        narrow: narrow,
-        payload: payload,
-        onChange: (change) => patchBoard(board.id, change),
-        onRemove: () => removeBoard(board.id),
-        onMenu: (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setMenu({ x: event.clientX, y: event.clientY, dropX: board.x + 24, dropY: board.y + 24, target: board.id });
-        },
-        setDragging: (value) => { dragRef.current = value; }
-      }))),
-      menu ? h("div", {
-        className: "gs-menu",
-        style: { left: menu.x, top: menu.y },
-        onClick: (event) => event.stopPropagation(),
-        onContextMenu: (event) => event.preventDefault()
-      },
-        h("p", null, "添加看板"),
-        CATALOG[session].map((item) => h("button", {
-          key: item.type,
-          type: "button",
-          onClick: () => addBoard(item.type, menu.dropX, menu.dropY)
-        }, item.title)),
-        menu.target ? h("button", { type: "button", className: "is-danger", onClick: () => removeBoard(menu.target) }, "移走这块") : null
-      ) : null
+      notes.length ? h("details", { className: "gs-gap" },
+        h("summary", null, "数据缺口 " + notes.length + " 条"),
+        notes.map((gap) => h("p", { key: gap }, gap))
+      ) : null,
+      picker ? h("button", {
+        type: "button",
+        className: "gs-scrim",
+        "aria-label": "关闭面板列表",
+        onClick: () => setPicker(false)
+      }) : null,
+      h("div", { className: narrow ? "gs-canvas is-narrow" : "gs-canvas" }, boards.map((board) => {
+        const place = placeOf(session, board.type, boards.length);
+        return h(Frame, {
+          key: board.id,
+          board: board,
+          narrow: narrow,
+          span: place.span,
+          minHeight: place.min,
+          payload: payload
+        });
+      }))
     );
   }
 
   function initialScheme() {
     if (document.body && document.body.hasAttribute("data-ds-dark-theme")) return "dark";
     return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function sessionForNow() {
+    const now = new Date();
+    const day = now.getDay();
+    if (day === 0 || day === 6) return "afterclose";
+    const hour = now.getHours();
+    if (hour < 9) return "preopen";
+    if (hour < 15) return "intraday";
+    return "afterclose";
+  }
+
+  function clockNow() {
+    return new Date().toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function orderedBoards(session, boards) {
+    const order = {
+      preopen: ["preopen-messages", "overnight"],
+      intraday: ["index-board", "breadth-board", "sentiment-dial", "minute-board", "hour-board", "sector-board", "leader-board", "auction-board", "overnight", "news-board", "market-radar", "market-dynamics", "wire-board", "predict-board", "coverage-board"],
+      afterclose: ["sentiment-dial", "theme-stage", "tomorrow-line", "reason-check", "limit-cards", "money-flow", "next-candidates", "fulfillment"]
+    };
+    const rank = new Map((order[session] || []).map((type, index) => [type, index]));
+    return boards.slice().sort((a, b) => (rank.get(a.type) == null ? 99 : rank.get(a.type)) - (rank.get(b.type) == null ? 99 : rank.get(b.type)));
+  }
+
+  function placeOf(session, type, count) {
+    if (count <= 1) return { span: 12, min: 320 };
+    if (session === "afterclose" && type === "sentiment-dial") return { span: 12, min: 120 };
+    return PLACE[type] || { span: 6, min: 220 };
   }
 
   function endpoints(session, date) {
@@ -527,82 +575,15 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
 
   function Frame(props) {
     const board = props.board;
-    const style = props.narrow ? null : { left: board.x, top: board.y, width: board.w, height: board.h };
-    return h("section", {
-      className: "gs-frame",
-      style: style,
-      onContextMenu: props.onMenu
-    },
-      h("header", {
-        className: "gs-frame-title",
-        onPointerDown: (event) => startDrag(event, board, props)
-      },
-        h("div", { className: "gs-frame-label" },
-          h("span", { className: "gs-dot", "aria-hidden": "true" }),
-          h("strong", null, TITLES[board.type] || board.type)
-        ),
-        h("button", { type: "button", "aria-label": "移走这块看板", onClick: props.onRemove }, "×")
+    const style = props.narrow
+      ? { minHeight: props.minHeight }
+      : { gridColumn: "span " + props.span, minHeight: props.minHeight };
+    return h("section", { className: "gs-frame", style: style },
+      h("header", { className: "gs-frame-title" },
+        h("strong", null, TITLES[board.type] || board.type)
       ),
-      h("div", { className: "gs-frame-body" }, h(Body, { type: board.type, payload: props.payload })),
-      props.narrow ? null : ["n", "s", "e", "w", "se"].map((edge) => h("i", {
-        key: edge,
-        className: "gs-handle gs-handle-" + edge,
-        onPointerDown: (event) => startResize(event, edge, board, props)
-      }))
+      h("div", { className: "gs-frame-body" }, h(Body, { type: board.type, payload: props.payload }))
     );
-  }
-
-  function startDrag(event, board, props) {
-    if (event.button !== 0 || props.narrow) return;
-    event.preventDefault();
-    event.stopPropagation();
-    props.setDragging(true);
-    const ox = event.clientX;
-    const oy = event.clientY;
-    const move = (ev) => props.onChange({
-      x: Math.max(0, Math.round(board.x + ev.clientX - ox)),
-      y: Math.max(0, Math.round(board.y + ev.clientY - oy))
-    });
-    const up = () => {
-      props.setDragging(false);
-      window.removeEventListener("pointermove", move);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
-  }
-
-  function startResize(event, edge, board, props) {
-    event.preventDefault();
-    event.stopPropagation();
-    props.setDragging(true);
-    const ox = event.clientX;
-    const oy = event.clientY;
-    const move = (ev) => {
-      const dx = ev.clientX - ox;
-      const dy = ev.clientY - oy;
-      const next = { x: board.x, y: board.y, w: board.w, h: board.h };
-      if (edge.includes("e")) next.w = clamp(board.w + dx, 240, 1600);
-      if (edge.includes("s")) next.h = clamp(board.h + dy, 160, 1200);
-      if (edge.includes("w")) {
-        next.w = clamp(board.w - dx, 240, 1600);
-        next.x = board.x + (board.w - next.w);
-      }
-      if (edge.includes("n")) {
-        next.h = clamp(board.h - dy, 160, 1200);
-        next.y = board.y + (board.h - next.h);
-      }
-      props.onChange(next);
-    };
-    const up = () => {
-      props.setDragging(false);
-      window.removeEventListener("pointermove", move);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
-  }
-
-  function clamp(value, low, high) {
-    return Math.max(low, Math.min(high, Math.round(value)));
   }
 
   function Body(props) {
@@ -662,9 +643,11 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   function Overnight(props) {
     const quotes = (props.data && props.data.quotes) || DEMO.quotes;
     const max = Math.max(...quotes.map((quote) => Math.abs(quote.pct)), 1);
-    return h("ul", { className: "gs-bars" }, quotes.map((quote) => h("li", { key: quote.code },
+    return h("ul", { className: "gs-bars" }, quotes.map((quote) => h("li", { key: quote.code, className: "gs-bar-row" },
       h("span", null, quote.name),
-      h("i", { className: quote.pct >= 0 ? "up" : "down", style: { width: Math.max(12, Math.abs(quote.pct) / max * 100) + "%" } }),
+      h("span", { className: "gs-bar-track" },
+        h("i", { className: quote.pct >= 0 ? "up" : "down", style: { width: Math.max(4, Math.abs(quote.pct) / max * 100) + "%" } })
+      ),
       h("b", { className: quote.pct >= 0 ? "up" : "down" }, signed(quote.pct))
     )));
   }
@@ -705,9 +688,9 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
       ["打板成功率", row.sealRate == null ? "—" : row.sealRate + "%"],
       ["打板溢价", row.premium == null ? "—" : row.premium + "%"]
     ];
-    return h("div", { className: "gs-dial" }, cells.map((cell) => h("div", { key: cell[0] },
-      h("b", null, cell[1] == null ? "—" : String(cell[1])),
-      h("span", null, cell[0])
+    return h("div", { className: "gs-dial" }, cells.map((cell) => h("div", { key: cell[0], className: dialTone(cell[0], cell[1]) },
+      h("span", null, cell[0]),
+      h("b", null, cell[1] == null ? "—" : String(cell[1]))
     )));
   }
 
@@ -717,10 +700,10 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
     return h("div", { className: "gs-stage" },
       STAGES.map((stage) => h("section", { key: stage },
         h("h3", null, stage),
-        h("div", null, themes.filter((theme) => theme.stage === stage).map((theme) => h("em", {
+        h("div", null, themes.some((theme) => theme.stage === stage) ? themes.filter((theme) => theme.stage === stage).map((theme) => h("em", {
           key: theme.name,
           className: theme.verdict === "口袋" ? "is-pocket" : ""
-        }, theme.name + " " + theme.height + "板")))
+        }, theme.name + " " + theme.height + "板")) : h("span", { className: "gs-empty" }, "无"))
       )),
       h("section", { className: "gs-industry" },
         h("h3", null, "行业"),
@@ -749,10 +732,12 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
     const max = Math.max(...props.rows.map((row) => Math.abs(row.yi || 0)), 1);
     return h("div", null,
       h("h3", null, props.title),
-      props.rows.map((row) => h("p", { key: row.name },
+      props.rows.map((row) => h("p", { key: row.name, className: "gs-bar-row" },
         h("span", null, row.name),
-        h("i", { className: props.kind, style: { width: Math.max(10, Math.abs(row.yi) / max * 100) + "%" } }),
-        h("b", null, String(row.yi))
+        h("span", { className: "gs-bar-track" },
+          h("i", { className: props.kind, style: { width: Math.max(4, Math.abs(row.yi) / max * 100) + "%" } })
+        ),
+        h("b", { className: props.kind }, amountText(row.yi))
       ))
     );
   }
@@ -808,10 +793,13 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   }
 
   function IndexBoard(props) {
-    return h("ul", { className: "gs-bars" }, (props.rows || []).map((row) => h("li", { key: row.code },
+    return h("div", { className: "gs-stats" }, (props.rows || []).map((row) => h("div", {
+      key: row.code,
+      className: (row.pct || 0) >= 0 ? "up" : "down"
+    },
       h("span", null, row.name),
-      h("i", { className: (row.pct || 0) >= 0 ? "up" : "down", style: { width: Math.max(12, Math.abs(row.pct || 0) * 18) + "%" } }),
-      h("b", { className: (row.pct || 0) >= 0 ? "up" : "down" }, row.close == null ? "—" : row.close + " " + signed(row.pct || 0))
+      h("b", null, signed(row.pct || 0)),
+      h("small", null, row.close == null ? "—" : formatNumber(row.close))
     )));
   }
 
@@ -819,53 +807,81 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
     const breadth = props.breadth || DEMO.breadth;
     const buckets = breadth.buckets || [];
     const max = Math.max(...buckets.map((row) => row.count || 0), 1);
-    return h("div", null,
-      h("div", { className: "gs-dial" }, [
-        ["上涨", breadth.up],
-        ["下跌", breadth.down],
-        ["平盘", breadth.flat]
-      ].map((cell) => h("div", { key: cell[0] }, h("b", null, String(cell[1] == null ? "—" : cell[1])), h("span", null, cell[0])))),
-      h("ul", { className: "gs-bars" }, buckets.map((row) => h("li", { key: row.label },
-        h("span", null, row.label),
-        h("i", { className: "up", style: { width: Math.max(8, row.count / max * 100) + "%" } }),
-        h("b", null, String(row.count))
+    return h("div", { className: "gs-breadth" },
+      h("div", { className: "gs-stats gs-stats-3" }, [
+        ["上涨", breadth.up, "up"],
+        ["下跌", breadth.down, "down"],
+        ["平盘", breadth.flat, ""]
+      ].map((cell) => h("div", { key: cell[0], className: cell[2] },
+        h("span", null, cell[0]),
+        h("b", null, String(cell[1] == null ? "—" : cell[1]))
+      ))),
+      h("div", { className: "gs-hist", role: "img", "aria-label": "涨跌家数分布" }, buckets.map((row) => h("div", { key: row.label, className: "gs-hist-col" },
+        h("b", null, String(row.count)),
+        h("i", { className: bucketTone(row.label), style: { height: Math.max(4, (row.count || 0) / max * 72) + "px" } }),
+        h("span", null, row.label)
       )))
     );
   }
 
   function MinuteBoard(props) {
-    return h("div", { className: "gs-sparks" }, (props.rows || []).map((row) => {
-      const points = row.points || [];
-      const low = Math.min(...points);
-      const high = Math.max(...points);
-      const span = Math.max(high - low, 0.01);
-      return h("section", { key: row.code },
+    return h("div", { className: "gs-sparks" }, (props.rows || []).map((row) => h(SeriesLine, { key: row.code, row: row })));
+  }
+
+  function SeriesLine(props) {
+    const row = props.row;
+    const points = row.points || [];
+    if (points.length < 2) return h("p", { className: "gs-empty" }, (row.name || "指数") + "还没有分钟");
+    const width = 360;
+    const height = 96;
+    const pad = 6;
+    const low = Math.min.apply(null, points);
+    const high = Math.max.apply(null, points);
+    const span = Math.max(high - low, 0.01);
+    const coords = points.map((point, index) => {
+      const x = pad + index / (points.length - 1) * (width - pad * 2);
+      const y = pad + (1 - (point - low) / span) * (height - pad * 2);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    }).join(" ");
+    const first = points[0];
+    const last = points[points.length - 1];
+    const change = first ? (last - first) / first * 100 : 0;
+    const tone = change >= 0 ? "up" : "down";
+    const baseY = pad + (1 - (first - low) / span) * (height - pad * 2);
+    return h("section", null,
+      h("header", { className: "gs-series-head" },
         h("h3", null, row.name),
-        h("div", { className: "gs-spark" }, points.map((point, index) => h("i", {
-          key: index,
-          style: { height: Math.max(8, (point - low) / span * 64) + "px" }
-        })))
-      );
-    }));
+        h("b", { className: tone }, formatNumber(last) + "  " + signed(change))
+      ),
+      h("svg", {
+        className: "gs-line",
+        viewBox: "0 0 " + width + " " + height,
+        role: "img",
+        "aria-label": row.name + " " + signed(change)
+      },
+        h("line", { x1: pad, x2: width - pad, y1: baseY, y2: baseY }),
+        h("polyline", { className: tone, points: coords })
+      )
+    );
   }
 
   function HourBoard(props) {
     const rows = props.rows || [];
     if (!rows.length) return h("p", { className: "gs-empty" }, "还没有小时成交");
     return h("table", { className: "gs-table" },
-      h("thead", null, h("tr", null, ["时间", "上证额", "深成额", "创业板额"].map((label) => h("th", { key: label }, label)))),
+      h("thead", null, h("tr", null, ["时间", "上证额", "深成额", "创业板额"].map((label, index) => h("th", { key: label, className: index ? "num" : "" }, label)))),
       h("tbody", null, rows.map((row) => h("tr", { key: row.slot },
         h("td", null, row.slot),
-        h("td", null, row.shAmount == null ? "—" : String(row.shAmount)),
-        h("td", null, row.szAmount == null ? "—" : String(row.szAmount)),
-        h("td", null, row.cyAmount == null ? "—" : String(row.cyAmount))
+        h("td", { className: "num" }, row.shAmount == null ? "—" : formatNumber(row.shAmount)),
+        h("td", { className: "num" }, row.szAmount == null ? "—" : formatNumber(row.szAmount)),
+        h("td", { className: "num" }, row.cyAmount == null ? "—" : formatNumber(row.cyAmount))
       )))
     );
   }
 
   function SectorBoard(props) {
     const sectors = props.sectors || DEMO.sectors;
-    return h("div", { className: "gs-lanes" },
+    return h("div", { className: "gs-lanes gs-lanes-3" },
       h(BarList, { title: "涨幅", rows: (sectors.gainers || []).map((row) => ({ name: row.name, yi: row.pct })), kind: "up" }),
       h(BarList, { title: "跌幅", rows: (sectors.losers || []).map((row) => ({ name: row.name, yi: row.pct })), kind: "down" }),
       h(BarList, { title: "净流入（亿）", rows: sectors.inflow || [], kind: "up" })
@@ -874,7 +890,7 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
 
   function LeaderBoard(props) {
     const leaders = props.leaders || DEMO.leaders;
-    const line = (row) => h("p", { key: row.code },
+    const line = (row) => h("p", { key: row.code, className: "gs-pair" },
       h("span", null, row.name),
       h("b", { className: (row.pct || 0) >= 0 ? "up" : "down" }, signed(row.pct || 0))
     );
@@ -885,9 +901,13 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   }
 
   function AuctionBoard(props) {
-    return h("ul", { className: "gs-bars" }, (props.rows || []).map((row) => h("li", { key: row.code },
+    const rows = props.rows || [];
+    const max = Math.max.apply(null, rows.map((row) => Math.abs(row.pct || 0)).concat(1));
+    return h("ul", { className: "gs-bars" }, rows.map((row) => h("li", { key: row.code, className: "gs-bar-row" },
       h("span", null, row.name),
-      h("i", { className: (row.pct || 0) >= 0 ? "up" : "down", style: { width: Math.max(8, Math.abs(row.pct || 0) * 8) + "%" } }),
+      h("span", { className: "gs-bar-track" },
+        h("i", { className: (row.pct || 0) >= 0 ? "up" : "down", style: { width: Math.max(4, Math.abs(row.pct || 0) / max * 100) + "%" } })
+      ),
       h("b", { className: (row.pct || 0) >= 0 ? "up" : "down" }, signed(row.pct || 0))
     )));
   }
@@ -919,13 +939,15 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   function CoverageBoard(props) {
     return h("div", { className: "gs-lanes" },
       h("table", { className: "gs-table" },
+        h("thead", null, h("tr", null, ["表", "行数", "最新"].map((label, index) => h("th", { key: label, className: index === 1 ? "num" : "" }, label)))),
         h("tbody", null, (props.rows || []).map((row) => h("tr", { key: row.name },
           h("td", null, row.name),
-          h("td", null, String(row.rows)),
+          h("td", { className: "num" }, formatNumber(row.rows)),
           h("td", null, row.latest || "—")
         )))
       ),
       h("table", { className: "gs-table" },
+        h("thead", null, h("tr", null, ["作业", "状态", "时间"].map((label) => h("th", { key: label }, label)))),
         h("tbody", null, (props.jobs || []).map((row) => h("tr", { key: row.job + row.status },
           h("td", null, row.job),
           h("td", null, row.status),
@@ -946,7 +968,38 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
 
   function signed(value) {
     const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
     return (number > 0 ? "+" : "") + number.toFixed(2) + "%";
+  }
+
+  function formatNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return number.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+  }
+
+  function amountText(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return (number > 0 ? "+" : "") + number.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+  }
+
+  function dialTone(label, value) {
+    if (label === "涨停") return "up";
+    if (label === "跌停" || label === "炸板") return "down";
+    if (label === "打板溢价") {
+      const number = Number(String(value).replace("%", ""));
+      if (!Number.isFinite(number) || number === 0) return "";
+      return number > 0 ? "up" : "down";
+    }
+    return "";
+  }
+
+  function bucketTone(label) {
+    const text = String(label || "");
+    if (text.includes("跌") || text.includes("弱")) return "down";
+    if (text.includes("涨") || text.includes("强")) return "up";
+    return "";
   }
 
   function Style() {
@@ -958,107 +1011,124 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   }
 
   const CSS = `
-.gs{--gs-bg:#F8FAFC;--gs-card:#FFFFFF;--gs-soft:#F1F5F9;--gs-ink:#1F2937;--gs-muted:#6B7280;--gs-faint:#9CA3AF;--gs-primary:#6366F1;--gs-primary-strong:#4F46E5;--gs-up:#EF4444;--gs-down:#10B981;--gs-shadow:0 20px 40px rgba(148,163,184,.28);--gs-shadow-hover:0 24px 48px rgba(99,102,241,.18);height:100%;min-height:100%;overflow:auto;background:var(--gs-bg);color:var(--gs-ink);font-family:"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.55;position:relative}
-.gs[data-scheme="dark"]{--gs-bg:#0F172A;--gs-card:#1E293B;--gs-soft:#334155;--gs-ink:#F8FAFC;--gs-muted:#CBD5E1;--gs-faint:#94A3B8;--gs-primary:#818CF8;--gs-primary-strong:#6366F1;--gs-up:#F87171;--gs-down:#34D399;--gs-shadow:0 20px 40px rgba(2,6,23,.35);--gs-shadow-hover:0 24px 48px rgba(99,102,241,.22)}
-.gs button,.gs input{font:inherit}
-.gs button{cursor:pointer;min-height:44px;transition:all .2s ease-in-out}
-.gs button:active{transform:scale(.95)}
-.gs button:focus-visible,.gs input:focus-visible{outline:none;box-shadow:0 0 0 4px rgba(99,102,241,.35)}
-.gs-top{display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:24px 24px 8px;position:sticky;top:0;z-index:5;background:color-mix(in srgb, var(--gs-bg) 92%, transparent);backdrop-filter:blur(18px)}
-.gs-brand{display:flex;flex-direction:column;min-width:88px;gap:4px}
-.gs-brand strong{font-size:28px;font-weight:600;letter-spacing:-0.03em;color:var(--gs-ink)}
-.gs-brand span{color:var(--gs-faint);font-size:12px}
-.gs-tabs,.gs-scheme{display:flex;gap:8px;padding:6px;background:var(--gs-card);border-radius:24px;box-shadow:var(--gs-shadow)}
-.gs-tabs button,.gs-scheme button,.gs-menu button{border:0;background:transparent;color:var(--gs-muted);border-radius:16px;padding:0 18px;font-weight:500}
-.gs-tabs button:hover,.gs-scheme button:hover,.gs-menu button:hover{color:var(--gs-ink);transform:translateY(-2px);box-shadow:var(--gs-shadow-hover)}
-.gs-tabs button.is-on,.gs-scheme button.is-on{background:var(--gs-primary-strong);color:#FFFFFF;box-shadow:0 12px 28px rgba(79,70,229,.30)}
-.gs-date{background:var(--gs-soft);color:inherit;border:0;border-radius:16px;padding:10px 16px;min-height:44px;box-shadow:none;transition:all .2s ease-in-out}
-.gs-date:focus{background:var(--gs-card);box-shadow:0 0 0 4px rgba(99,102,241,.35)}
-.gs-risk{margin:8px 24px 8px;color:var(--gs-muted);font-size:13px;max-width:42rem}
-.gs-gap{margin:0 24px 8px;color:var(--gs-primary-strong);font-size:13px}
-.gs-canvas{position:relative;margin:8px 16px 32px}
-.gs-canvas.is-narrow{display:flex;flex-direction:column;gap:24px}
-.gs-frame{position:absolute;background:var(--gs-card);border:0;border-radius:24px;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--gs-shadow);transition:all .3s ease-in-out}
-.gs-frame:hover{transform:translateY(-2px);box-shadow:var(--gs-shadow-hover)}
-.gs-canvas.is-narrow .gs-frame{position:relative;left:auto;top:auto;width:auto;height:auto;min-height:240px}
-.gs-frame-title{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 8px;cursor:grab}
-.gs-frame-label{display:flex;align-items:center;gap:10px}
-.gs-frame-label strong{font-size:18px;font-weight:600;color:var(--gs-ink)}
-.gs-dot{width:28px;height:28px;border-radius:999px;background:rgba(99,102,241,.12);box-shadow:inset 0 0 0 6px rgba(99,102,241,.18)}
-.gs-frame-title button{width:36px;min-height:36px;border:0;border-radius:999px;background:rgba(99,102,241,.10);color:var(--gs-primary-strong);padding:0}
-.gs-frame-title button:hover{transform:translateY(-2px);box-shadow:var(--gs-shadow-hover);background:var(--gs-primary-strong);color:#FFFFFF}
-.gs-frame-body{padding:8px 24px 24px;overflow:auto;min-height:0;flex:1}
-.gs-handle{position:absolute}
-.gs-handle-e,.gs-handle-w{top:36px;bottom:24px;width:12px;cursor:ew-resize}
-.gs-handle-e{right:0}.gs-handle-w{left:0}
-.gs-handle-n,.gs-handle-s{left:36px;right:24px;height:12px;cursor:ns-resize}
-.gs-handle-n{top:0}.gs-handle-s{bottom:0}
-.gs-handle-se{right:10px;bottom:10px;width:16px;height:16px;cursor:nwse-resize;border-radius:999px;background:rgba(99,102,241,.18)}
-.gs-menu{position:fixed;z-index:20;background:var(--gs-card);border:0;border-radius:24px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:200px;max-height:70vh;overflow:auto;box-shadow:var(--gs-shadow)}
-.gs-table{width:100%;border-collapse:collapse;font-size:13px}
-.gs-table th,.gs-table td{padding:8px 6px;text-align:left;color:var(--gs-ink)}
-.gs-table tbody tr+tr td{border-top:1px solid rgba(148,163,184,.25)}
-.gs-sparks{display:flex;flex-direction:column;gap:16px}
-.gs-spark{display:flex;align-items:flex-end;gap:3px;height:72px}
-.gs-spark i{flex:1;border-radius:999px;background:rgba(99,102,241,.55);min-width:4px}
-.gs-menu p{margin:6px 10px;font-size:12px;color:var(--gs-faint)}
-.gs-menu button{text-align:left;padding:0 14px;color:var(--gs-ink);background:transparent;border-radius:16px}
-.gs-menu button.is-danger{color:var(--gs-up)}
-.gs-empty,.gs-quiet{color:var(--gs-muted);padding:8px 0}
-.gs-dial{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px}
-.gs-dial div{background:var(--gs-soft);border-radius:20px;padding:16px;box-shadow:0 10px 24px rgba(148,163,184,.18)}
-.gs-dial b{display:block;font-size:30px;line-height:1.1;font-weight:600;letter-spacing:-0.03em;color:var(--gs-ink)}
-.gs-dial span{color:var(--gs-muted);font-size:12px}
-.gs-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.gs-stage h3,.gs-money h3,.gs-lanes h3{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--gs-muted)}
-.gs-stage em,.gs-chips em,.gs-lanes em,.gs-tomorrow em,.gs-pulse em{display:inline-flex;align-items:center;margin:0 8px 8px 0;padding:6px 12px;background:rgba(99,102,241,.10);color:var(--gs-primary-strong);border-radius:999px;font-style:normal;font-size:13px;font-weight:500}
-.gs-stage em.is-pocket{opacity:.55}
-.gs-messages{display:grid;grid-template-columns:96px 1fr;gap:24px;height:100%}
-.gs-rail{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:16px}
-.gs-icon{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0 10px;border-radius:999px;background:rgba(99,102,241,.12);color:var(--gs-primary-strong);font-weight:600}
-.gs-rail small{display:block;margin-top:6px;color:var(--gs-faint)}
-.gs-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;align-content:start}
-.gs-cards article,.gs-feed article,.gs-reasons article,.gs-limits article,.gs-fulfill article,.gs-lane-group{background:var(--gs-soft);padding:20px;border-radius:24px;box-shadow:0 12px 28px rgba(148,163,184,.16);transition:all .3s ease-in-out}
-.gs-cards article:hover,.gs-feed article:hover,.gs-reasons article:hover,.gs-limits article:hover,.gs-fulfill article:hover{transform:translateY(-2px);box-shadow:var(--gs-shadow-hover)}
-.gs-cards header,.gs-feed header,.gs-reasons header,.gs-limits header,.gs-fulfill header{display:flex;justify-content:space-between;gap:10px;align-items:center}
-.gs-cards p,.gs-feed p,.gs-reasons p,.gs-limits p,.gs-pulse p{margin:8px 0 0;color:var(--gs-muted);font-size:14px}
-.gs-cards ul{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
-.gs-cards li{display:flex;gap:10px;color:var(--gs-ink);font-size:13px}
-.gs-feed{display:flex;flex-direction:column;gap:16px}
-.gs-feed input{background:var(--gs-soft);color:inherit;border:0;border-radius:16px;padding:12px 16px;min-height:44px;transition:all .2s ease-in-out}
-.gs-feed input:focus{background:var(--gs-card);box-shadow:0 0 0 4px rgba(99,102,241,.35)}
-.gs-pulse{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
-.gs-pulse li{display:grid;grid-template-columns:72px auto 1fr;gap:12px;align-items:start;padding:12px 0}
-.gs-pulse time,.gs-feed time{color:var(--gs-faint);font-size:12px}
-.gs-pulse .is-fresh,.gs-feed .is-fresh{animation:gs-in .25s ease-in-out}
-.up{color:var(--gs-up)} .down{color:var(--gs-down)}
-.gs-bars,.gs-money p{display:grid;grid-template-columns:96px 1fr 64px;gap:12px;align-items:center;margin:10px 0}
+.gs{--gs-bg:#f4f5f5;--gs-card:#ffffff;--gs-soft:#f7f8f9;--gs-ink:#1a1a1a;--gs-muted:#4d535a;--gs-faint:#5e656d;--gs-line:#e3e4e6;--gs-track:#eceef0;--gs-up:#c4162a;--gs-down:#1a7f37;--gs-warn:#8a4b08;--gs-focus:#1f60c4;--gs-live:#1a7f37;height:100%;min-height:100%;overflow:auto;background:var(--gs-bg);color:var(--gs-ink);font-family:"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5;position:relative;font-variant-numeric:tabular-nums}
+.gs[data-scheme="dark"]{--gs-bg:#111217;--gs-card:#181b1f;--gs-soft:#111217;--gs-ink:#e6e8ea;--gs-muted:#b7bdc4;--gs-faint:#9aa0a6;--gs-line:#2c3235;--gs-track:#2c3235;--gs-up:#ff8fa0;--gs-down:#73bf69;--gs-warn:#ffb357;--gs-focus:#8ab8ff;--gs-live:#73bf69}
+.gs button,.gs input{font:inherit;color:inherit}
+.gs button{cursor:pointer;min-height:32px;border:1px solid transparent;background:transparent;border-radius:2px}
+.gs button:focus-visible,.gs input:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+.gs-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;position:sticky;top:0;z-index:30;background:var(--gs-bg);border-bottom:1px solid var(--gs-line)}
+.gs-brand{display:flex;align-items:baseline;gap:8px;min-width:72px}
+.gs-brand strong{font-size:15px;font-weight:600;color:var(--gs-ink)}
+.gs-brand span{color:var(--gs-muted);font-size:12px}
+.gs-tabs,.gs-scheme{display:flex;gap:2px;padding:2px;background:transparent;border:1px solid var(--gs-line);border-radius:2px}
+.gs-tabs button,.gs-scheme button,.gs-picker > button{border:1px solid transparent;background:transparent;color:var(--gs-muted);border-radius:2px;padding:0 12px;font-weight:500}
+.gs-tabs button:hover,.gs-scheme button:hover,.gs-picker > button:hover,.gs-menu button:hover{color:var(--gs-ink);background:var(--gs-card)}
+.gs-tabs button.is-on,.gs-scheme button.is-on,.gs-picker > button.is-on{background:var(--gs-card);color:var(--gs-ink);border-color:var(--gs-line)}
+.gs-date{background:var(--gs-card);color:inherit;border:1px solid var(--gs-line);border-radius:2px;padding:4px 8px;min-height:32px}
+.gs-picker{position:relative}
+.gs-status{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 0 auto;color:var(--gs-muted);font-size:12px}
+.gs-status b{font-weight:600;font-style:normal}
+.gs-status b.is-live{color:var(--gs-live)}
+.gs-status b.is-demo{color:var(--gs-warn)}
+.gs-gap{margin:0;padding:6px 12px;color:var(--gs-warn);font-size:12px;background:var(--gs-card);border-bottom:1px solid var(--gs-line)}
+.gs-gap summary{cursor:pointer}
+.gs-gap p{margin:6px 0 0}
+.gs-scrim{position:fixed;inset:0;z-index:15;border:0;background:transparent;min-height:0}
+.gs-canvas{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px;margin:8px 12px 24px;align-items:stretch}
+.gs-canvas.is-narrow{grid-template-columns:1fr}
+.gs-frame{position:relative;min-width:0;background:var(--gs-card);border:1px solid var(--gs-line);border-radius:2px;display:flex;flex-direction:column;overflow:hidden}
+.gs-frame-title{display:flex;align-items:center;min-height:32px;padding:0 12px;border-bottom:1px solid var(--gs-line);background:var(--gs-card)}
+.gs-frame-title strong{font-size:13px;font-weight:600;color:var(--gs-ink)}
+.gs-frame-body{padding:10px 12px 12px;overflow:auto;min-height:0;flex:1}
+.gs-menu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;background:var(--gs-card);border:1px solid var(--gs-line);border-radius:2px;padding:6px;display:flex;flex-direction:column;gap:2px;min-width:220px;max-height:70vh;overflow:auto}
+.gs-menu p{margin:4px 8px 6px;font-size:12px;color:var(--gs-muted)}
+.gs-menu button{display:flex;align-items:center;gap:8px;text-align:left;padding:0 8px;color:var(--gs-ink);background:transparent;border-radius:2px;min-height:32px}
+.gs-menu button i{width:14px;font-style:normal;color:var(--gs-down)}
+.gs-menu button.is-on{background:var(--gs-soft)}
+.gs-table{width:100%;border-collapse:collapse;font-size:12px}
+.gs-table th,.gs-table td{padding:5px 8px;text-align:left;color:var(--gs-ink);border-bottom:1px solid var(--gs-line)}
+.gs-table th{color:var(--gs-muted);font-weight:500}
+.gs-table th.num,.gs-table td.num{text-align:right}
+.gs-sparks{display:flex;flex-direction:column;gap:12px}
+.gs-series-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.gs-series-head h3,.gs-money h3,.gs-lanes h3,.gs-stage h3{margin:0;font-size:12px;font-weight:600;color:var(--gs-muted)}
+.gs-series-head b{font-size:13px;font-weight:600}
+.gs-line{width:100%;height:112px;display:block}
+.gs-line line{stroke:var(--gs-line);stroke-width:1;stroke-dasharray:3 3}
+.gs-line polyline{fill:none;stroke-width:1.75}
+.gs-line polyline.up{stroke:var(--gs-up)}
+.gs-line polyline.down{stroke:var(--gs-down)}
+.gs-empty,.gs-quiet{color:var(--gs-muted);padding:8px 0;margin:0}
+.gs-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.gs-stats-3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:12px}
+.gs-stats span,.gs-dial span{display:block;color:var(--gs-muted);font-size:12px}
+.gs-stats b,.gs-dial b{display:block;font-size:22px;line-height:1.2;font-weight:600}
+.gs-stats small{display:block;margin-top:2px;color:var(--gs-muted);font-size:12px}
+.gs-stats .up b,.gs-dial .up b,.up{color:var(--gs-up)}
+.gs-stats .down b,.gs-dial .down b,.down{color:var(--gs-down)}
+.gs-dial{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.gs-dial div{padding:2px 8px;border-left:2px solid var(--gs-line);min-width:0}
+.gs-dial div.up{border-left-color:var(--gs-up)}
+.gs-dial div.down{border-left-color:var(--gs-down)}
+.gs-hist{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;align-items:end;min-height:120px}
+.gs-hist-col{display:grid;grid-template-rows:18px 72px auto;align-items:end;justify-items:center;gap:4px;min-width:0}
+.gs-hist-col b{font-size:12px;font-weight:500}
+.gs-hist-col i{align-self:end;display:block;width:100%;max-width:36px;min-height:4px;border-radius:1px 1px 0 0;background:var(--gs-faint)}
+.gs-hist-col i.up{background:var(--gs-up)}
+.gs-hist-col i.down{background:var(--gs-down)}
+.gs-hist-col span{font-size:12px;color:var(--gs-muted);text-align:center;line-height:1.3}
+.gs-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.gs-stage em,.gs-chips em,.gs-lanes em,.gs-tomorrow em,.gs-pulse em{display:inline-flex;align-items:center;margin:0 6px 6px 0;padding:2px 6px;background:transparent;color:var(--gs-ink);border:1px solid var(--gs-line);border-radius:2px;font-style:normal;font-size:12px;font-weight:500}
+.gs-stage em.is-pocket{color:var(--gs-muted)}
+.gs-messages{display:grid;grid-template-columns:72px 1fr;gap:12px;height:100%}
+.gs-rail{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.gs-icon{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:24px;padding:0 6px;border-radius:2px;background:transparent;border:1px solid var(--gs-line);color:var(--gs-ink);font-weight:600;font-size:12px}
+.gs-rail small{display:block;margin-top:4px;color:var(--gs-muted);font-size:12px}
+.gs-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0 16px;align-content:start}
+.gs-cards article,.gs-feed article,.gs-reasons article,.gs-limits article,.gs-fulfill article,.gs-lane-group{background:transparent;padding:8px 0;border:0;border-bottom:1px solid var(--gs-line);border-radius:0;box-shadow:none}
+.gs-cards header,.gs-feed header,.gs-reasons header,.gs-limits header,.gs-fulfill header{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.gs-cards p,.gs-feed p,.gs-reasons p,.gs-limits p,.gs-pulse p{margin:4px 0 0;color:var(--gs-muted);font-size:13px}
+.gs-cards ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.gs-cards li{display:flex;gap:8px;color:var(--gs-ink);font-size:13px}
+.gs-feed{display:flex;flex-direction:column;gap:8px}
+.gs-feed input{background:var(--gs-bg);color:inherit;border:1px solid var(--gs-line);border-radius:2px;padding:6px 8px;min-height:32px}
+.gs-pulse{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.gs-pulse li{display:grid;grid-template-columns:64px auto 1fr;gap:8px;align-items:start;padding:6px 0;border-bottom:1px solid var(--gs-line)}
+.gs-pulse time,.gs-feed time{color:var(--gs-muted);font-size:12px}
+.gs-bar-row{display:grid;grid-template-columns:minmax(64px,1.2fr) minmax(48px,1.6fr) max-content;gap:8px;align-items:center;margin:6px 0}
 .gs-bars{list-style:none;padding:0;margin:0}
-.gs-bars i,.gs-money i{display:block;height:10px;border-radius:999px}
-.gs-bars i.up,.gs-money i.up{background:rgba(239,68,68,.75)}
-.gs-bars i.down,.gs-money i.down{background:rgba(16,185,129,.75)}
-.gs-reasons,.gs-limits,.gs-fulfill{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
-.gs-lanes{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.gs-lane-group{margin-bottom:12px}
-.gs-mini{display:flex;align-items:flex-end;gap:4px;height:36px;margin-top:12px}
-.gs-mini i{display:block;width:8px;border-radius:999px}
-.gs-mini i.up{background:rgba(239,68,68,.75)} .gs-mini i.down{background:rgba(16,185,129,.75)}
-.gs-tomorrow b{display:block;font-size:40px;line-height:1;font-weight:600;letter-spacing:-0.04em;margin-bottom:16px;color:var(--gs-ink)}
-.gs-nav-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:rgba(99,102,241,.12);color:var(--gs-primary-strong);font-weight:600}
-mark{background:transparent;color:var(--gs-primary-strong);font-weight:600}
+.gs-pair{display:flex;justify-content:space-between;gap:8px;margin:4px 0}
+.gs-bar-track{display:block;height:6px;background:var(--gs-track);border-radius:1px}
+.gs-bar-track i,.gs-mini i{display:block;height:6px;border-radius:1px}
+.gs-bar-track i.up,.gs-mini i.up{background:var(--gs-up)}
+.gs-bar-track i.down,.gs-mini i.down{background:var(--gs-down)}
+.gs-bar-row b,.gs-pair b{text-align:right;font-weight:500}
+.gs-reasons,.gs-limits,.gs-fulfill{display:grid;grid-template-columns:1fr;gap:0}
+.gs-lanes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gs-lanes-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gs-lane-group{margin-bottom:8px}
+.gs-mini{display:flex;align-items:flex-end;gap:3px;height:32px;margin-top:8px}
+.gs-mini i{display:block;width:6px;border-radius:1px 1px 0 0}
+.gs-tomorrow b{display:block;font-size:28px;line-height:1.1;font-weight:600;margin-bottom:8px;color:var(--gs-ink)}
+.gs-nav-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:2px;border:1px solid var(--gs-line);color:var(--gs-ink);font-weight:600;font-size:12px}
+.gs-limits article.up strong{color:var(--gs-up)}
+.gs-limits article.down strong{color:var(--gs-down)}
+mark{background:transparent;color:var(--gs-ink);font-weight:600}
 mark.down{color:var(--gs-down)}
-@keyframes gs-in{from{transform:translateY(-6px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){
-  .gs button,.gs-frame,.gs-cards article,.gs-feed article,.gs-reasons article,.gs-limits article,.gs-fulfill article,.gs-pulse .is-fresh,.gs-feed .is-fresh{transition:none;animation:none;transform:none}
+  .gs-pulse .is-fresh,.gs-feed .is-fresh{animation:none}
 }
 @media (max-width:840px){
-  .gs-top{padding:16px}
-  .gs-brand strong{font-size:24px}
+  .gs-top{padding:8px}
+  .gs-status{margin-left:0;flex-basis:100%}
+  .gs-picker{position:static}
+  .gs-menu{position:absolute;left:8px;right:8px;top:100%;width:auto;min-width:0}
   .gs-dial{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .gs-messages,.gs-lanes,.gs-pulse li,.gs-stage{grid-template-columns:1fr}
-  .gs-frame-body{padding:8px 20px 20px}
+  .gs-stats-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .gs-hist{grid-template-columns:repeat(3,minmax(0,1fr));min-height:0}
+  .gs-messages,.gs-lanes,.gs-lanes-3,.gs-pulse li,.gs-stage{grid-template-columns:1fr}
 }
-`;
+`
 
   module.exports.name = "guanshi-board-client";
   module.exports.inject = ["slots", "layout", "theme"];
