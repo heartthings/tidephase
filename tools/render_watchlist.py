@@ -2,8 +2,11 @@
 """把预测结果画成三张图：风向个股、可能的一板、可能的二板。"""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+import yaml
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -11,9 +14,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 FONT_B = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
-# yan 的沙箱只能写自己的工作区。写到 market-datalayer/reports 会被拒，
-# 然后它会申请提权并停住，飞书就收不到图。
-OUT_DIR = Path("/home/hello/文档/deepseek-harness/default-workspace/观势简报")
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _brief_dir() -> Path:
+    if os.environ.get("GUANSHI_BRIEF_DIR"):
+        return Path(os.environ["GUANSHI_BRIEF_DIR"])
+    local = ROOT / "configs" / "local.yaml"
+    if local.is_file():
+        cfg = yaml.safe_load(local.read_text()) or {}
+        if cfg.get("brief_dir"):
+            return Path(str(cfg["brief_dir"]))
+    return ROOT / "data" / "briefs"
+
+
+OUT_DIR = _brief_dir()
 
 W = 1080
 PAD = 36

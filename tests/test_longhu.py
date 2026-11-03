@@ -38,7 +38,7 @@ class TestLonghuThreeWayFailure:
         """网络超时 → SourceErrorKind.NETWORK。"""
         mock_secrets.return_value = {
             "hosts": {"apphwhq": "https://apphwhq.longhuvip.com/w1/api/index.php"},
-            "account_3167791": {"device_id": "test_device"},
+            "longhu_secondary": {"device_id": "test_device"},
         }
         adapter = LonghuAdapter()
 
@@ -52,7 +52,7 @@ class TestLonghuThreeWayFailure:
         """认证失败 (errcode=-1) → SourceErrorKind.AUTH。"""
         mock_secrets.return_value = {
             "hosts": {"apphwhq": "https://apphwhq.longhuvip.com/w1/api/index.php"},
-            "account_3167791": {"device_id": "test_device"},
+            "longhu_secondary": {"device_id": "test_device"},
         }
         adapter = LonghuAdapter()
 
@@ -67,7 +67,7 @@ class TestLonghuThreeWayFailure:
         """恒空 (errcode=0 + 空数据) → SourceErrorKind.EMPTY。"""
         mock_secrets.return_value = {
             "hosts": {"apphwhq": "https://apphwhq.longhuvip.com/w1/api/index.php"},
-            "account_3167791": {"device_id": "test_device"},
+            "longhu_secondary": {"device_id": "test_device"},
         }
         adapter = LonghuAdapter()
 
@@ -83,7 +83,7 @@ class TestLonghuThreeWayFailure:
         """HTTP 429 → 触发熔断 → SourceErrorKind.RATE_LIMIT。"""
         mock_secrets.return_value = {
             "hosts": {"apphwhq": "https://apphwhq.longhuvip.com/w1/api/index.php"},
-            "account_3167791": {"device_id": "test_device"},
+            "longhu_secondary": {"device_id": "test_device"},
         }
         adapter = LonghuAdapter()
 
@@ -126,7 +126,7 @@ class TestLonghuThreeWayFailure:
         """PopularityList 端点解析：代码序列。"""
         mock_secrets.return_value = {
             "hosts": {"apphwshhq": "https://apphwshhq.longhuvip.com/w1/api/index.php"},
-            "account_3965820": {"user_id": "3965820", "token": "test", "device_id": "test"},
+            "longhu_primary": {"user_id": "user", "token": "test", "device_id": "test"},
         }
         adapter = LonghuAdapter()
 

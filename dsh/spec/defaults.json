@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "sessions": {
+    "preopen": {
+      "boards": [
+        { "id": "preopen-messages-1", "type": "preopen-messages", "x": 16, "y": 16, "w": 1080, "h": 680 }
+      ]
+    },
+    "intraday": {
+      "boards": [
+        { "id": "index-board-1", "type": "index-board", "x": 16, "y": 16, "w": 380, "h": 280 },
+        { "id": "breadth-board-1", "type": "breadth-board", "x": 412, "y": 16, "w": 360, "h": 280 },
+        { "id": "sentiment-dial-1", "type": "sentiment-dial", "x": 788, "y": 16, "w": 380, "h": 280 },
+        { "id": "minute-board-1", "type": "minute-board", "x": 16, "y": 312, "w": 560, "h": 300 },
+        { "id": "hour-board-1", "type": "hour-board", "x": 592, "y": 312, "w": 576, "h": 300 },
+        { "id": "sector-board-1", "type": "sector-board", "x": 16, "y": 628, "w": 560, "h": 340 },
+        { "id": "leader-board-1", "type": "leader-board", "x": 592, "y": 628, "w": 576, "h": 340 },
+        { "id": "auction-board-1", "type": "auction-board", "x": 16, "y": 984, "w": 360, "h": 300 },
+        { "id": "overnight-1", "type": "overnight", "x": 392, "y": 984, "w": 360, "h": 300 },
+        { "id": "news-board-1", "type": "news-board", "x": 768, "y": 984, "w": 400, "h": 300 },
+        { "id": "market-radar-1", "type": "market-radar", "x": 16, "y": 1300, "w": 560, "h": 360 },
+        { "id": "market-dynamics-1", "type": "market-dynamics", "x": 592, "y": 1300, "w": 576, "h": 360 },
+        { "id": "wire-board-1", "type": "wire-board", "x": 16, "y": 1676, "w": 560, "h": 280 },
+        { "id": "predict-board-1", "type": "predict-board", "x": 592, "y": 1676, "w": 576, "h": 280 },
+        { "id": "coverage-board-1", "type": "coverage-board", "x": 16, "y": 1972, "w": 1152, "h": 280 }
+      ]
+    },
+    "afterclose": {
+      "boards": [
+        { "id": "sentiment-dial-1", "type": "sentiment-dial", "x": 16, "y": 16, "w": 1136, "h": 168 },
+        { "id": "theme-stage-1", "type": "theme-stage", "x": 16, "y": 200, "w": 740, "h": 360 },
+        { "id": "tomorrow-line-1", "type": "tomorrow-line", "x": 772, "y": 200, "w": 380, "h": 168 },
+        { "id": "money-flow-1", "type": "money-flow", "x": 772, "y": 384, "w": 380, "h": 176 },
+        { "id": "reason-check-1", "type": "reason-check", "x": 16, "y": 576, "w": 560, "h": 320 },
+        { "id": "limit-cards-1", "type": "limit-cards", "x": 592, "y": 576, "w": 560, "h": 320 },
+        { "id": "next-candidates-1", "type": "next-candidates", "x": 16, "y": 912, "w": 740, "h": 340 },
+        { "id": "fulfillment-1", "type": "fulfillment", "x": 772, "y": 912, "w": 380, "h": 340 }
+      ]
+    }
+  }
+}

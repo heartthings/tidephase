@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guanshi.dev/spec/boards.schema.json",
+  "title": "Tidephase board canvas",
+  "type": "object",
+  "required": ["version", "sessions"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "sessions": {
+      "type": "object",
+      "required": ["preopen", "intraday", "afterclose"],
+      "additionalProperties": false,
+      "properties": {
+        "preopen": { "$ref": "#/$defs/canvas" },
+        "intraday": { "$ref": "#/$defs/canvas" },
+        "afterclose": { "$ref": "#/$defs/canvas" }
+      }
+    }
+  },
+  "$defs": {
+    "canvas": {
+      "type": "object",
+      "required": ["boards"],
+      "additionalProperties": false,
+      "properties": {
+        "boards": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/board" }
+        }
+      }
+    },
+    "board": {
+      "type": "object",
+      "required": ["id", "type", "x", "y", "w", "h"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "type": {
+          "enum": [
+            "preopen-messages",
+            "overnight",
+            "market-radar",
+            "market-dynamics",
+            "sentiment-dial",
+            "theme-stage",
+            "reason-check",
+            "money-flow",
+            "limit-cards",
+            "next-candidates",
+            "fulfillment",
+            "tomorrow-line"
+          ]
+        },
+        "x": { "type": "number", "minimum": 0 },
+        "y": { "type": "number", "minimum": 0 },
+        "w": { "type": "number", "minimum": 220, "maximum": 2400 },
+        "h": { "type": "number", "minimum": 120, "maximum": 1600 }
+      }
+    }
+  }
+}

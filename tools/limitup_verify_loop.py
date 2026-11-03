@@ -20,7 +20,6 @@ import psycopg2
 import yaml
 
 SECRETS = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
-TOKEN = Path("/home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token")
 API = "http://127.0.0.1:8787/data/predict_limitup?format=json"
 WRITE_API = "http://127.0.0.1:8787"
 TZ = timezone(timedelta(hours=8))
@@ -64,7 +63,7 @@ def _api_json(path_or_url, method="GET", body=None, write=False):
 
 
 def _predict(as_of: str | None = None):
-    token = TOKEN.read_text().strip()
+    token = _token("read")
     url = API if not as_of else f"{API}&date={as_of}"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=180) as resp:

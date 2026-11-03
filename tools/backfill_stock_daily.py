@@ -4,7 +4,7 @@ stock_daily 缺口补齐（近 7 个自然日内的交易日）
 Z7 变更：梁总 2026-10-10 裁决"不用 3 年，前一周即可"。
 用途：补齐近 7 天内缺失的交易日数据（非全量历史回填）。
 - 断点续传：progress 表记录每只股票完成状态
-- 日志落盘：/home/hello/application/dev/market-datalayer/data/backfill_stock_daily.log
+- 日志落盘：仓库 data/backfill_stock_daily.log
 - 速率控制：1-2s 随机延迟，避免被封 IP
 """
 import json, logging, os, sys, time, traceback
@@ -15,7 +15,7 @@ import psycopg2
 import yaml
 
 # Setup logging
-LOG_DIR = Path("/home/hello/application/dev/market-datalayer/data")
+LOG_DIR = Path(__file__).resolve().parent.parent / "data"
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backfill")
 
-SECRETS_PATH = Path("/home/hello/application/dev/market-datalayer/configs/secrets.yaml")
+SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 
 # Z7: 默认窗口改为"近 7 个自然日"
 DEFAULT_WINDOW_DAYS = 7

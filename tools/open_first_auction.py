@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -23,11 +24,25 @@ from zoneinfo import ZoneInfo
 import psycopg2
 import yaml
 
-ROOT = Path("/home/hello/application/dev/market-datalayer")
+ROOT = Path(__file__).resolve().parent.parent
 SECRETS = ROOT / "configs/secrets.yaml"
 PACK = ROOT / "data/cache/open_first_pack.json"
 MARKER_DIR = ROOT / "data/cache"
-PUSH = Path("/home/hello/application/red/workdsh/runtime/preview/agents/skills/feishu-push/scripts/feishu_push.py")
+
+
+def _machine_path(key: str) -> Path | None:
+    env = {"feishu_push": "GUANSHI_FEISHU_PUSH", "brief_dir": "GUANSHI_BRIEF_DIR"}.get(key, key)
+    if os.environ.get(env):
+        return Path(os.environ[env])
+    local = ROOT / "configs" / "local.yaml"
+    if local.is_file():
+        cfg = yaml.safe_load(local.read_text()) or {}
+        if cfg.get(key):
+            return Path(str(cfg[key]))
+    return None
+
+
+PUSH = _machine_path("feishu_push")
 TZ = ZoneInfo("Asia/Shanghai")
 
 POCKET = {
@@ -449,6 +464,8 @@ def news_hit(pack: dict) -> set[str]:
 
 
 def send(title: str, content: str) -> None:
+    if PUSH is None:
+        raise SystemExit("Set feishu_push in configs/local.yaml or GUANSHI_FEISHU_PUSH")
     proc = subprocess.run(
         [
             sys.executable, str(PUSH),
@@ -464,6 +481,8 @@ def send(title: str, content: str) -> None:
 
 
 def send_image(title: str, path: Path) -> None:
+    if PUSH is None:
+        raise SystemExit("Set feishu_push in configs/local.yaml or GUANSHI_FEISHU_PUSH")
     proc = subprocess.run(
         [
             sys.executable, str(PUSH),
@@ -484,7 +503,7 @@ def render_image(day: str, rows: list[dict]) -> Path:
 
     font = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
     font_b = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
-    out_dir = Path("/home/hello/文档/deepseek-harness/default-workspace/观势简报")
+    out_dir = _machine_path("brief_dir") or (ROOT / "data" / "briefs")
     title_f = ImageFont.truetype(font_b, 40)
     note_f = ImageFont.truetype(font, 22)
     name_f = ImageFont.truetype(font_b, 30)

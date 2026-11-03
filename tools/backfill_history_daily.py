@@ -27,7 +27,7 @@ import psycopg2
 import requests
 import yaml
 
-LOG_DIR = Path("/home/hello/application/dev/market-datalayer/data")
+LOG_DIR = Path(__file__).resolve().parent.parent / "data"
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +39,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backfill_history")
 
-SECRETS_PATH = Path("/home/hello/application/dev/market-datalayer/configs/secrets.yaml")
+SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 JOB_NAME = "backfill_history_daily"
 
 KLINE_URL = "https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData"

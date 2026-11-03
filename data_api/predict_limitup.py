@@ -389,7 +389,7 @@ def _fetch_plate_tree(parents: dict) -> dict:
     from concurrent.futures import ThreadPoolExecutor, as_completed
     conf = yaml.safe_load(SECRETS_PATH.read_text()) if SECRETS_PATH.exists() else {}
     lh = conf.get("longhu") or {}
-    device = ((lh.get("account_3167791") or {}).get("device_id")) or ""
+    device = ((lh.get("longhu_secondary") or {}).get("device_id")) or ""
     host = (lh.get("hosts") or {}).get("apphwhq") or "https://apphwhq.longhuvip.com/w1/api/index.php"
     headers = {
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12)",

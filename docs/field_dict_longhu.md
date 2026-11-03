@@ -62,7 +62,7 @@
 
 **端点**: `GetMoneyDate / Emotion`（st=30）
 **主机**: `apphis.longhuvip.com`
-**认证**: DeviceID / 账号 3167791
+**认证**: DeviceID，凭证放在本机 secrets.yaml
 **响应结构**: `ZY[]` 30 个交易日对象
 
 | JSON 路径 | 语义 | 类型 | 映射目标表字段 | 来源 |
@@ -107,7 +107,7 @@
 
 **端点**: `MorningBiddingList / HomeDingPan`（Type=4）
 **主机**: `apphwhq.longhuvip.com`
-**认证**: 账号 3965820
+**认证**: 账号凭证，放在本机 secrets.yaml
 **响应结构**: `info[]` 数组，每元素为 JSONArray
 
 ### 竞价委买数组语义（落库 stock_market_data）

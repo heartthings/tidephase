@@ -1,0 +1,35 @@
+{
+  "name": "guanshi-board",
+  "version": "0.1.5",
+  "type": "module",
+  "description": "A-share pre-open, intraday, and after-close boards for DeepSeek Harness.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.browser.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.browser.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "react": "19.2.4"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ]
+    }
+  },
+  "license": "MIT"
+}

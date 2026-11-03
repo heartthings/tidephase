@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Migration runner for market-datalayer.
+Migration runner for Tidephase.
 Idempotent: reads schema_migrations, skips already-applied versions.
 Usage: python tools/migrate.py [--host HOST] [--port PORT] [--db DB] [--user USER] [--password PW]
 """
@@ -17,11 +17,26 @@ import yaml
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "db" / "migrations"
 SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 
-# Ordered migration files
-MIGRATION_FILES = [
-    "V001__init_d0_d1_d2_d3_d7.sql",
-    "V001__hypertables_policies.sql",
-]
+# Filename stem is not the key stored in schema_migrations.
+MIGRATION_KEYS = {
+    "V001__init_d0_d1_d2_d3_d7.sql": "V001",
+    "V001__hypertables_policies.sql": "V001_ht",
+}
+
+
+def migration_files() -> list[Path]:
+    files = list(MIGRATIONS_DIR.glob("V*.sql"))
+
+    def order(path: Path):
+        version = path.name.split("__", 1)[0]
+        init_first = 0 if "init_" in path.name else 1
+        return (version, init_first, path.name)
+
+    return sorted(files, key=order)
+
+
+def migration_key(path: Path) -> str:
+    return MIGRATION_KEYS.get(path.name, path.name.split("__", 1)[0])
 
 
 def load_secrets():
@@ -52,9 +67,9 @@ def get_applied(conn):
 
 
 def run_migration(conn, filepath, applied):
-    version = filepath.stem
+    version = migration_key(filepath)
     if version in applied:
-        print(f"  SKIP {version} (already applied)")
+        print(f"  SKIP {filepath.name} ({version})")
         return True
 
     sql = filepath.read_text(encoding="utf-8")
@@ -76,7 +91,7 @@ def run_migration(conn, filepath, applied):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run market-datalayer migrations")
+    parser = argparse.ArgumentParser(description="Run Tidephase migrations")
     parser.add_argument("--host", default=None)
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--db", default=None)
@@ -91,12 +106,7 @@ def main():
     print(f"Already applied: {applied or '(none)'}")
 
     all_ok = True
-    for fname in MIGRATION_FILES:
-        fpath = MIGRATIONS_DIR / fname
-        if not fpath.exists():
-            print(f"  MISSING {fname}")
-            all_ok = False
-            continue
+    for fpath in migration_files():
         if not run_migration(conn, fpath, applied):
             all_ok = False
             break

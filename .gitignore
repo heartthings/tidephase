@@ -1,11 +1,13 @@
 # Secrets & credentials
 configs/secrets.yaml
+configs/local.yaml
 *.env
 .env
 
 # Raw data archive and local run output
 data/raw/
 data/cache/
+data/boards/
 data/*.log
 data/*.out
 
@@ -15,6 +17,7 @@ data/*.out
 
 # Frontend
 node_modules/
+dsh/.packs/
 
 # Python
 __pycache__/

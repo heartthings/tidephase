@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "sessions": {
+    "preopen": [
+      { "type": "preopen-messages", "title": "盘前消息" },
+      { "type": "overnight", "title": "隔夜外盘" }
+    ],
+    "intraday": [
+      { "type": "index-board", "title": "指数涨跌" },
+      { "type": "breadth-board", "title": "涨跌分布" },
+      { "type": "sentiment-dial", "title": "赚钱效应" },
+      { "type": "overnight", "title": "隔夜外盘" },
+      { "type": "minute-board", "title": "指数分钟" },
+      { "type": "hour-board", "title": "指数小时成交" },
+      { "type": "sector-board", "title": "板块涨跌与资金" },
+      { "type": "leader-board", "title": "领涨领跌" },
+      { "type": "auction-board", "title": "竞价强弱" },
+      { "type": "market-radar", "title": "市场雷达" },
+      { "type": "market-dynamics", "title": "市场动态" },
+      { "type": "news-board", "title": "快讯" },
+      { "type": "wire-board", "title": "电报与催化" },
+      { "type": "predict-board", "title": "预测与反思" },
+      { "type": "coverage-board", "title": "数据覆盖" }
+    ],
+    "afterclose": [
+      { "type": "sentiment-dial", "title": "情绪刻度" },
+      { "type": "theme-stage", "title": "题材舞台" },
+      { "type": "reason-check", "title": "原因核对" },
+      { "type": "money-flow", "title": "资金去向" },
+      { "type": "limit-cards", "title": "涨停与跌停" },
+      { "type": "next-candidates", "title": "次日候选" },
+      { "type": "fulfillment", "title": "预测兑现" },
+      { "type": "tomorrow-line", "title": "明日一句" }
+    ]
+  }
+}

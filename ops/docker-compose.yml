@@ -1,7 +1,5 @@
-# 观势数据层 docker-compose
-# 五服务：market-tsdb / market-sched / market-worker / market-api / market-console
-# 所有端口仅绑 127.0.0.1 或 compose 内网，永不 0.0.0.0
-# 不动 Dify / 1Panel / mysql_green / redis_green / minio_green
+# 观势（Tidephase）：数据库、采集、读接口、DeepSeek Harness。
+# 端口只绑 127.0.0.1。浏览器打开 http://127.0.0.1:3080 进入观势。
 
 services:
   # ─── TimescaleDB (PG16) ───────────────────────────────────────────
@@ -13,6 +11,10 @@ services:
       POSTGRES_DB: market_tsdb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD}
+      DUSER_WRITER_PASSWORD: ${DUSER_WRITER_PASSWORD}
+      DUSER_READER_PASSWORD: ${DUSER_READER_PASSWORD}
+      DUSER_ADMIN_PASSWORD: ${DUSER_ADMIN_PASSWORD}
+      DUSER_D12WRITER_PASSWORD: ${DUSER_D12WRITER_PASSWORD}
       TZ: Asia/Shanghai
       PGTZ: Asia/Shanghai
     ports:
@@ -37,6 +39,25 @@ services:
         -c max_connections=50
         -c log_timezone=Asia/Shanghai
 
+  market-migrate:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.migrate
+    container_name: market-migrate
+    restart: "no"
+    environment:
+      TZ: Asia/Shanghai
+      MARKET_TSDB_HOST: market-tsdb
+      MARKET_TSDB_PORT: "5432"
+      MARKET_TSDB_NAME: market_tsdb
+      MARKET_TSDB_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD}
+    depends_on:
+      market-tsdb:
+        condition: service_healthy
+    networks:
+      - market-net
+
   # ─── Scheduler (APScheduler) ──────────────────────────────────────
   market-sched:
     build:
@@ -55,6 +76,8 @@ services:
     depends_on:
       market-tsdb:
         condition: service_healthy
+      market-migrate:
+        condition: service_completed_successfully
     volumes:
       - ../configs:/app/configs:ro
       - ../dworker:/app/dworker:ro
@@ -129,6 +152,7 @@ services:
     volumes:
       - ../configs:/app/configs:ro
       - ../data_api:/app/data_api:ro
+      - ../dsh/spec:/app/dsh/spec:ro
     command: python -m uvicorn data_api.main:app --host 0.0.0.0 --port 8787
     healthcheck:
       test: ["CMD-SHELL", "python -c 'print(\"placeholder\")'"]
@@ -139,11 +163,30 @@ services:
     networks:
       - market-net
 
-  # ─── 观势台（静态页 + 同源反代）────────────────────────────────
-  # 跟 Dify 一样：容器自己占一个本机端口，FRP 单独转发。
-  # 本机 127.0.0.1:7511，占用原来系统 nginx 的公网映射 8005。
-  # 容器内仍听 80，/api 与 /auth 转到 market-api:8787。
+  market-dsh:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.dsh
+    container_name: market-dsh
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3080:3080"
+    environment:
+      TZ: Asia/Shanghai
+      DSH_HOME: /data
+      DSH_AGENTS_HOME: /data/agents
+      GUANSHI_API_BASE: http://market-api:8787
+    volumes:
+      - dsh_home:/data
+    depends_on:
+      market-api:
+        condition: service_healthy
+    networks:
+      - market-net
+
+  # 旧的本机页面。默认不启动。需要时：docker compose --profile legacy up -d market-console
   market-console:
+    profiles: ["legacy"]
     build:
       context: ../console
       dockerfile: Dockerfile
@@ -160,6 +203,8 @@ services:
 
 volumes:
   tsdb_data:
+    driver: local
+  dsh_home:
     driver: local
 
 networks:

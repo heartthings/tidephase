@@ -28,7 +28,10 @@ from data_api.reflection_pack import (
     assemble_reflection_pack, get_route_map, invalidate_route_map_cache,
     DEFAULT_ROUTE_MAP,
 )
+from fastapi.middleware.cors import CORSMiddleware
+
 from data_api.lovetrade_routes import router as lovetrade_router
+from data_api.public_boards import router as public_boards_router
 from data_api.z7ext_routes import router as z7ext_router, init_auth as z7ext_init_auth
 
 logging.basicConfig(level=logging.INFO)
@@ -251,12 +254,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="观势数据层 API",
     version="1.0.0",
-    description="观势数据层 REST API · E1-E19 端点 · Bearer token 三档鉴权",
+    description="Tidephase · A 股只读与看板",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "PUT", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 # Z8 W2: 注册 lovetrade 路由
 app.include_router(lovetrade_router)
+app.include_router(public_boards_router)
 
 # Z7-ext: 注册催化雷达路由（需要在 auth 函数定义之后初始化）
 z7ext_init_auth(require_read, require_write, get_reader_conn, get_d12writer_conn)

@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Application code
 COPY data_api/ /app/data_api/
+COPY dsh/spec/ /app/dsh/spec/
 COPY configs/ /app/configs/
 
 ENV PYTHONPATH=/app

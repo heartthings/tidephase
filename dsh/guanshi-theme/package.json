@@ -1,0 +1,32 @@
+{
+  "name": "guanshi-theme",
+  "version": "0.1.2",
+  "type": "module",
+  "description": "Soft light and dark palette for DeepSeek Harness and the Tidephase boards.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.browser.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.browser.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.4"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme"
+      ]
+    }
+  },
+  "license": "MIT"
+}

@@ -3,15 +3,37 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import urllib.request
 from pathlib import Path
 
-TOKEN = Path("/home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token")
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
 API = "http://127.0.0.1:8787/data/predict_limitup?format=json"
-PUSH = Path("/home/hello/application/red/workdsh/runtime/preview/agents/skills/feishu-push/scripts/feishu_push.py")
-MARKER_DIR = Path("/home/hello/文档/deepseek-harness/default-workspace/观势简报")
+
+
+def _machine_path(key: str) -> Path | None:
+    env = {"feishu_push": "GUANSHI_FEISHU_PUSH", "brief_dir": "GUANSHI_BRIEF_DIR"}[key]
+    if os.environ.get(env):
+        return Path(os.environ[env])
+    local = ROOT / "configs" / "local.yaml"
+    if local.is_file():
+        cfg = yaml.safe_load(local.read_text()) or {}
+        if cfg.get(key):
+            return Path(str(cfg[key]))
+    return None
+
+
+def _read_token() -> str:
+    sec = yaml.safe_load((ROOT / "configs" / "secrets.yaml").read_text())
+    return sec["api"]["bearer_token_read"]
+
+
+PUSH = _machine_path("feishu_push")
+MARKER_DIR = _machine_path("brief_dir") or (ROOT / "data" / "briefs")
 TITLES = {
     "leaders": "观势 · 风向个股",
     "first": "观势 · 可能的一板",
@@ -20,7 +42,9 @@ TITLES = {
 
 
 def main() -> None:
-    token = TOKEN.read_text().strip()
+    if PUSH is None:
+        raise SystemExit("Set feishu_push in configs/local.yaml or GUANSHI_FEISHU_PUSH")
+    token = _read_token()
     req = urllib.request.Request(API, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=180) as resp:
         payload = json.loads(resp.read().decode())

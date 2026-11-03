@@ -1,0 +1,4 @@
+# Copy to configs/local.yaml. That file is gitignored.
+# Paths are this machine only. Leave empty to use repo data/briefs.
+feishu_push: ""
+brief_dir: ""

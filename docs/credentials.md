@@ -30,7 +30,7 @@
 | 委托 | `longhu.entrust_purchase` |
 | 题材 | `longhu.theme_info_token` |
 
-### 龙虎限速（Z7 梁总 10-10 裁决）
+### 龙虎限速
 
 - **人为限速已删除**：0.5rps / 日≤1500 限制不再执行
 - **保留反应式熔断**：429/403 → 全源熔断 30min（`longhu.py _trigger_circuit_breaker`）

@@ -1,7 +1,5 @@
-# seed_jobs.yaml → job_registry 种子数据
-# M1 的 18 个作业（§4.1）
-# 盘中作业 enabled=false（开市后由梁总下令启用）
-# cron 时区 Asia/Shanghai
+# seed_jobs.yaml → job_registry
+# cron 时区 Asia/Shanghai。enabled 为 true 的作业在调度容器启动后按时刻表运行。
 
 jobs:
   - job_name: j_trade_cal

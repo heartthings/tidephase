@@ -31,7 +31,7 @@ PG_USER = os.getenv("PG_USER", "duser_reader")
 PG_PASS = os.getenv("PG_PASS", "")
 
 # raw 归档根目录
-RAW_ROOT = os.getenv("RAW_ARCHIVE_ROOT", "/home/hello/application/dev/market-datalayer/data/raw")
+RAW_ROOT = os.getenv("RAW_ARCHIVE_ROOT", str(Path(__file__).resolve().parents[2] / "data" / "raw"))
 
 # 抽样表清单（跨域）
 AUDIT_TABLES = [

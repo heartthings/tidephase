@@ -1,90 +1,94 @@
-# 观势数据层 (market-datalayer)
+# Tidephase
 
-> 自建时序库（TimescaleDB）+ 采集管道 + data-api + 观势台页面
+Chinese name: 观势. A-share market data, and a DeepSeek Harness plugin that draws it as boards.
 
-## 架构
+**A-shares only.** Read [DISCLAIMER.md](DISCLAIMER.md) before using the numbers. 中文说明见 [README.zh-CN.md](README.zh-CN.md).
 
-```
-数据源（腾讯/东财/通达信/AKShare/新浪/龙虎/…）
-    ↓
-dsched 调度服务（APScheduler + job_registry）
-    ↓
-dworker 采集工作器（源适配器 + 降级链 + 校验 + quarantine）
-    ↓
-TimescaleDB (PG16) · market_tsdb
-    ↓
-data-api (FastAPI，容器内 8787，宿主仅 127.0.0.1:8787)
-    ↓
-观势台 market-console（127.0.0.1:7511）
-    · 静态页面
-    · /api、/auth 同源转到 market-api
-    · frp [console]：本机 7511 → 公网 8005（原来系统 nginx 的映射）
-    ↓
-浏览器 / 观势 skill
-```
+The open-source entry is the **观势** panel inside Harness. This repo ships two plugins:
 
-页面容器自带 nginx，只服务观势台。宿主机不再跑系统 nginx；每个应用自己占一个本机端口，再在 frp 里单独转发。
+- `guanshi-board` — three canvases
+- `guanshi-theme` — a soft light theme and a soft dark theme
 
-## 目录结构
+Harness is pinned to official `@deepseek-ai/dsh@0.2.0-rc.2`.
 
-```
-market-datalayer/
-├── console/                  # 观势台（guanshi-console）
-├── db/migrations/            # DDL 迁移（V001__init...）
-├── dworker/                  # 采集框架
-│   ├── adapters/             # 源适配器（tencent/eastmoney/mootdx/akshare/sina）
-│   ├── core/                 # 降级链/限速/重试/校验/quarantine
-│   └── validate/             # 校验引擎
-├── dsched/                   # 调度服务
-├── data_api/                 # FastAPI
-├── tools/                    # 迁移/回填/冒烟工具
-├── ops/                      # docker-compose
-├── configs/                  # rate_limits / validation_rules / secrets（不入 git）
-├── tests/                    # 单元测试
-└── data/raw/                 # raw 归档（不入 git）
-```
+## Start from zero
 
-## 快速启动
+You need Docker and Docker Compose. From the repo root:
 
 ```bash
-# 1. 配置凭证
+cp ops/.env.example ops/.env
 cp configs/secrets.yaml.example configs/secrets.yaml
-# 编辑 secrets.yaml 填入密码
-
-# 2. 启动服务
-cd ops && docker compose up -d
-
-# 3. 运行迁移
-python3 tools/migrate.py --host 127.0.0.1 --port 15432 --user postgres --password <super_pw>
-
-# 4. 验证
-docker compose ps
 ```
 
-## 角色权限
+Change the five database passwords in `ops/.env`. The four role passwords under `database` in `configs/secrets.yaml` must match. The superuser password stays only in `.env`. Do not commit either file.
 
-| 角色 | 权限 | 用途 |
-|------|------|------|
-| duser_writer | SELECT/INSERT/UPDATE 采集表 | 采集管道 |
-| duser_reader | SELECT + statement_timeout=30s | data-api 查询 |
-| duser_admin | ALL | 运维/DDL |
-| duser_d12writer | cognition/prediction/base_rate INSERT/UPDATE | D12 写通道 |
+One command brings up the database, schema, collectors, read API, and Harness:
 
-## 安全红线
+```bash
+cd ops
+docker compose up -d --build
+```
 
-- 凭证/密码/token 一律不进 git（secrets.yaml + .gitignore）
-- 监听端口只绑 127.0.0.1（或 compose 内网）
-- 不动生产容器
-- API 永不公网暴露
+The first run creates the database, applies migrations, and installs the plugins. Then:
 
-## 运维决策记录
+```bash
+docker compose logs market-dsh | grep 'dsh web:'
+```
 
-| 日期 | 决策 | 说明 |
-|------|------|------|
-| 2026-10-10 | **取消 dops 远端备份** | 梁总裁决：不需要备份。风险告知已由督军留痕。代码面不建 backup timer/脚本。 |
+Open the logged URL in a browser, with the host set to `127.0.0.1`, for example `http://127.0.0.1:3080/?token=...`. The session sticks after the first open. Choose **观势** in the sidebar.
 
-## 状态
+The API is `http://127.0.0.1:8787`. Board reads do not ask for a login. If the browser is not on the same machine as the API, run this in the board page console and reload:
 
-- **Z1 波**：数据层基建 ✅ 完成
-- **Z2 波**：data-api 实装 + 龙虎 adapter ✅ 完成
-- **Z7 波**：数据纠错 + 龙虎落地 + Z5 残余（进行中）
+```js
+localStorage.setItem("guanshi.api", "http://your-data-api")
+```
+
+Put your own model key in Harness settings. This repo does not ship one.
+
+## What you see
+
+Three sessions. Right-click empty canvas to add a board for the current session. Drag a title to move a board. Drag an edge to resize it.
+
+- **Pre-open:** messages grouped by hour and theme. Overnight global quotes are in the menu.
+- **Intraday:** index moves, advance/decline buckets, money effect, overnight quotes, index minutes, hourly index volume, sector moves and flow, leaders, auction, radar, tape, headlines, wires and catalysts, predictions, and data coverage. The intraday canvas refreshes about every two minutes. Sample figures stay on screen until the API has rows.
+- **After close:** sentiment, theme stage, reason check, money flow, limit-up and limit-down cards, next-day candidates, fulfillment, and a one-line plan.
+
+Switch light and dark from the board header.
+
+Stages follow the stored rules: under 3 boards is still gathering, 3 is ignition, 4–5 is fermentation, 6 or more is climax. A sharp drop in limit-ups, or a cluster of broken boards, is divergence. A collapse after that height is ebb.
+
+## Collection
+
+After `docker compose up -d`, the scheduler collects on the trading-day timetable. Calendar, overnight markets, indexes, daily stocks, limit-up pools, auction, radar, headlines, and sectors are on by default. The coverage board shows the latest day in each table and whether the last day's jobs succeeded.
+
+To collect one day now, from `ops` (use a real trade date):
+
+```bash
+docker compose exec market-sched python -c "
+from dworker.core.runner import execute_job
+print(execute_job('j_index_daily', trigger='manual', extra_params={'date':'2026-11-03'}))
+"
+```
+
+Useful job names: `j_trade_cal`, `j_global_overnight`, `j_index_daily`, `j_index_minute`, `j_stock_daily`, `j_zt_pools`, `j_bidding_list`, `j_radar`, `j_market_messages_hot`.
+
+Closed days are skipped. A missing source is recorded as a gap, not filled from another day.
+
+Longhu jobs need your own account. Put the user id, token, and device id in `longhu.longhu_primary` and `longhu.longhu_secondary` inside `configs/secrets.yaml`, then `docker compose restart market-sched`. The other jobs still run without that account.
+
+After editing `db/seed_jobs.yaml` or `dworker/`, run `docker compose restart market-sched`. After editing `data_api/`, run `docker compose restart market-api`.
+
+## Layout
+
+```
+data_api/     read API, including /api/public/v1
+dworker/      collectors
+dsched/       timetable
+dsh/          plugins and installer
+db/           schema migrations
+ops/          Docker Compose
+```
+
+## License
+
+[MIT](LICENSE). Market data from upstream vendors stays under those vendors' terms.

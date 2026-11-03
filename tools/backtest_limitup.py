@@ -24,7 +24,7 @@ import pandas as pd
 import numpy as np
 import yaml
 
-SECRETS_PATH = Path("/home/hello/application/dev/market-datalayer/configs/secrets.yaml")
+SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 
 
 def get_conn():

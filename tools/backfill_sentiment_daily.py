@@ -12,7 +12,7 @@ import psycopg2
 import requests
 import yaml
 
-LOG_DIR = Path("/home/hello/application/dev/market-datalayer/data")
+LOG_DIR = Path(__file__).resolve().parent.parent / "data"
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backfill_sentiment")
 
-SECRETS_PATH = Path("/home/hello/application/dev/market-datalayer/configs/secrets.yaml")
+SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 
 def load_secrets():
     with open(SECRETS_PATH) as f:

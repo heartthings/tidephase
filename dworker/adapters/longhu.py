@@ -39,7 +39,7 @@ ENDPOINT_MAP = {
         "host": "apphwhq",
         "a": "DailyLimitResumption",
         "c": "GetPlateInfo_w38",
-        "auth": "device_3167791",
+        "auth": "device_secondary",
     },
     # D3 情绪 → apphis, DeviceID 认证
     # B4 修复(2026-10-10): 参数按 Java 源码固化（督军实测验证）
@@ -64,7 +64,7 @@ ENDPOINT_MAP = {
         "host": "apphwhq",
         "a": "Radar",
         "c": "HomeDingPan",
-        "auth": "device_3167791",
+        "auth": "device_secondary",
     },
     # D3 竞价列表 → apphwhq, 专用凭证
     "MorningBiddingList": {
@@ -78,28 +78,28 @@ ENDPOINT_MAP = {
         "host": "apphwhq",
         "a": "HomeDingPan",
         "c": "HomeDingPan",
-        "auth": "device_3167791",
+        "auth": "device_secondary",
     },
-    # D3 市场表现多视图 → apphwhq, 账号 3167791
+    # D3 市场表现多视图 → apphwhq, 龙虎账号
     "MarketPerformance": {
         "host": "apphwhq",
         "a": "GetInfo",
         "c": "Index",
-        "auth": "account_3167791",
+        "auth": "account_secondary",
     },
-    # D4 游资动向 → applhb, 账号 3965820
+    # D4 游资动向 → applhb, 龙虎账号
     "YouZiDongXiang": {
         "host": "applhb",
         "a": "YouZiDongXiangByList",
         "c": "Index",
-        "auth": "account_3965820",
+        "auth": "account_primary",
     },
-    # D6 人气榜 → apphwshhq, 账号 3965820
+    # D6 人气榜 → apphwshhq, 龙虎账号
     "PopularityList": {
         "host": "apphwshhq",
         "a": "GetRQZ_Data",
         "c": "Index",
-        "auth": "account_3965820",
+        "auth": "account_primary",
     },
     # D6 板块排名 → apphwhq, DeviceID 认证
     "PlateMovement": {
@@ -108,28 +108,28 @@ ENDPOINT_MAP = {
         "c": "ZhiShuRanking",
         "auth": "device_plate",
     },
-    # D6 风车 → apphwhq, 账号 3965820
+    # D6 风车 → apphwhq, 龙虎账号
     "MarketWind": {
         "host": "apphwhq",
         "a": "GetFengKList",
         "c": "StockFengKData",
-        "auth": "account_3965820",
+        "auth": "account_primary",
     },
-    # D6 最强风车 → apphwshhq, 账号 3965820
+    # D6 最强风车 → apphwshhq, 龙虎账号
     "StrongestWind": {
         "host": "apphwshhq",
         "a": "GetFengKListBest",
         "c": "StockFengKData",
-        "auth": "account_3965820",
+        "auth": "account_primary",
     },
-    # D6 指数成分股 → apphwshhq, 账号 3965820
+    # D6 指数成分股 → apphwshhq, 龙虎账号
     "WindVane": {
         "host": "apphwshhq",
         "a": "ZhiShuStockList_W8",
         "c": "ZhiShuRanking",
-        "auth": "account_3965820",
+        "auth": "account_primary",
     },
-    # D6 题材信息 → applhb, 账号 3167791 + 专用 token
+    # D6 题材信息 → applhb, 龙虎账号 + 专用 token
     "ThemeInfo": {
         "host": "applhb",
         "a": "InfoGet",
@@ -141,35 +141,35 @@ ENDPOINT_MAP = {
         "host": "apphwhq",
         "a": "GetZsTrend",
         "c": "StockL2Data",
-        "auth": "device_3167791",
+        "auth": "device_secondary",
     },
     # D2 个股 L2 → apphwshhq, DeviceID 认证
     "StockDetail": {
         "host": "apphwshhq",
         "a": "GetStockPanKou_Narrow",
         "c": "StockL2Data",
-        "auth": "device_3965820",
+        "auth": "device_primary",
     },
     # D10 直播/概念点 → apphwhq, DeviceID 认证
     "OpeningStockDynamicNews": {
         "host": "apphwhq",
         "a": "ZhiBoContent",
         "c": "ConceptionPoint",
-        "auth": "device_3167791",
+        "auth": "device_secondary",
     },
-    # D6 概念查询 → apparticle, 账号 3965820
+    # D6 概念查询 → apparticle, 龙虎账号
     "StockConcept": {
         "host": "apparticle",
         "a": "GetConceptJXBKw23",
         "c": "StockF10Basic",
-        "auth": "account_3965820",
+        "auth": "account_primary",
     },
     # D3 涨停表现 → apphwhq, DeviceID 认证
     "DailyLimitPerformance": {
         "host": "apphwhq",
         "a": "HomeDingPan",
         "c": "HomeDingPan",
-        "auth": "device_3167791",
+        "auth": "device_secondary",
     },
 }
 
@@ -203,29 +203,28 @@ class LonghuAdapter(BaseAdapter):
 
     def _get_auth_params(self, auth_type: str) -> dict:
         """根据认证类型返回对应凭证参数。"""
-        if auth_type == "account_3965820":
-            acct = self._secrets.get("account_3965820", {})
+        if auth_type == "account_primary":
+            acct = self._secrets.get("longhu_primary", {})
             return {
-                "UserID": acct.get("user_id", "3965820"),
+                "UserID": acct.get("user_id", ""),
                 "Token": acct.get("token", ""),
                 "DeviceID": acct.get("device_id", ""),
             }
-        elif auth_type == "account_3167791":
-            acct = self._secrets.get("account_3167791", {})
+        elif auth_type == "account_secondary":
+            acct = self._secrets.get("longhu_secondary", {})
             return {
-                "UserID": acct.get("user_id", "3167791"),
+                "UserID": acct.get("user_id", ""),
                 "Token": acct.get("token", ""),
                 "DeviceID": acct.get("device_id", ""),
             }
-        elif auth_type == "device_3167791":
-            acct = self._secrets.get("account_3167791", {})
+        elif auth_type == "device_secondary":
+            acct = self._secrets.get("longhu_secondary", {})
             return {"DeviceID": acct.get("device_id", "")}
-        elif auth_type == "device_3965820":
-            acct = self._secrets.get("account_3965820", {})
+        elif auth_type == "device_primary":
+            acct = self._secrets.get("longhu_primary", {})
             return {"DeviceID": acct.get("device_id", "")}
         elif auth_type == "device_plate":
-            # PlateMovement 用 64hex DeviceID
-            return {"DeviceID": "07ba97d5a3259b5130a2cb0f3042e39573a7a5427d9eb138120f8ce65a56125e"}
+            return {"DeviceID": self._secrets.get("plate_device_id", "")}
         elif auth_type == "emotion_device":
             return {"DeviceID": self._secrets.get("emotion_device_id", "")}
         elif auth_type == "entrust_purchase":
@@ -236,9 +235,9 @@ class LonghuAdapter(BaseAdapter):
                 "DeviceID": ep.get("device_id", ""),
             }
         elif auth_type == "theme_info":
-            acct = self._secrets.get("account_3167791", {})
+            acct = self._secrets.get("longhu_secondary", {})
             return {
-                "UserID": acct.get("user_id", "3167791"),
+                "UserID": acct.get("user_id", ""),
                 "Token": self._secrets.get("theme_info_token", ""),
                 "DeviceID": acct.get("device_id", ""),
             }

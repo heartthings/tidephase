@@ -29,7 +29,7 @@ from dworker.jobs.j_index_daily import (
     _fetch_tencent, _fetch_eastmoney, _fetch_akshare, _write_to_db, INDEX_CODES
 )
 
-LOG_DIR = Path("/home/hello/application/dev/market-datalayer/data")
+LOG_DIR = Path(__file__).resolve().parent.parent / "data"
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -41,7 +41,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backfill_index_daily_pct")
 
-SECRETS_PATH = Path("/home/hello/application/dev/market-datalayer/configs/secrets.yaml")
+SECRETS_PATH = Path(__file__).resolve().parent.parent / "configs" / "secrets.yaml"
 
 
 def get_conn():

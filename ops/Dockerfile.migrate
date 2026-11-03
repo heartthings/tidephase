@@ -1,0 +1,6 @@
+FROM python:3.12-slim
+RUN pip install --no-cache-dir psycopg2-binary pyyaml
+WORKDIR /app
+COPY tools/migrate.py /app/tools/migrate.py
+COPY db /app/db
+CMD ["python", "/app/tools/migrate.py"]
