@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把预测结果画成三张图：风向个股、可能的一板、可能的二板。"""
+"""把预测结果画成一张图：可能的一板。只列技术形态，并写出每个板块有几只。"""
 from __future__ import annotations
 
 import os
@@ -40,20 +40,10 @@ CARD = (255, 252, 246)
 HEAD = (24, 48, 36)
 PILL = (24, 48, 36)
 
-LEADERS = (
-    "风向个股",
-    "开始聚焦（当天至少 2 只涨停）也留。每条只看最高那只，用来看题材还能不能延续。",
-    (("leaders", None),),
-)
 FIRST = (
     "可能的一板",
-    "提前埋伏。买在分歧，卖在一致。题材还在聚集、正在分歧，或刚启动。发酵和高潮不在这张图里。右边是历史晋级率。",
+    "只看技术形态：缩量后连续放量上影、急跌后放量上影、连板后连续下跌跌出空间。不看消息，也不看板块有没有一起动。标题上的数字是这个板块有几只。右边是历史晋级率。",
     (("first", None),),
-)
-SECOND = (
-    "可能的二板",
-    "接力。只留题材还可能延续的：开始聚焦、启动、发酵。高潮是一致兑现，不接力。右边是历史晋级率。",
-    (("second", None),),
 )
 
 
@@ -88,7 +78,7 @@ def _sections(result, kind):
         items = g.get(item_key) or []
         if not items:
             continue
-        rows.append((f"{g.get('theme') or '未归属'}    {g.get('phase') or ''}".strip(), items))
+        rows.append((f"{g.get('theme') or '未归属'}    {len(items)}只", items))
     return rows
 
 
@@ -100,6 +90,9 @@ def _blocks(result, parts):
         sections = _sections(result, kind)
         if not sections:
             blocks.append(("empty", "这一类今天没有。"))
+        elif kind == "first":
+            summary = " · ".join(f"{head.split('    ')[0]} {len(items)}只" for head, items in sections)
+            blocks.append(("banner", "板块只数  " + summary))
         for head, items in sections:
             blocks.append(("group", head, items, kind))
     return blocks
@@ -185,16 +178,13 @@ def _wrap(text, font, width):
 def render_images(result: dict, out_dir: Path | None = None) -> list[Path]:
     day = str(result.get("as_of") or "unknown").replace("-", "")
     base = out_dir or OUT_DIR
-    sheets = (
-        (*LEADERS, f"watchlist_{day}_leaders.png"),
-        (*FIRST, f"watchlist_{day}_first.png"),
-        (*SECOND, f"watchlist_{day}_second.png"),
-    )
-    return [_draw_one(result, title, note, parts, base / name) for title, note, parts, name in sheets]
+    title, note, parts = FIRST
+    path = _draw_one(result, title, note, parts, base / f"watchlist_{day}_first.png")
+    return [path]
 
 
 def render_three(result: dict, out_dir: Path | None = None) -> list[Path]:
-    """兼容旧调用。现在出三张：风向个股、可能的一板、可能的二板。"""
+    """兼容旧调用。现在只出可能的一板。"""
     return render_images(result, out_dir)
 
 

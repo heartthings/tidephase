@@ -754,8 +754,7 @@ window.__ModuleLoader__.load({id: "guanshi-board", factory: function (require) {
   function Candidates(props) {
     const book = props.candidates || DEMO.candidates;
     return h("div", { className: "gs-lanes" },
-      h(Lane, { title: "首板候选", groups: book.first }),
-      h(Lane, { title: "二板候选", groups: book.second })
+      h(Lane, { title: "一板候选", groups: book.first })
     );
   }
 

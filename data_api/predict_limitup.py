@@ -14,9 +14,8 @@ L2 逻辑回归分别估计
   - 标签与特征均按相邻交易日计算；停牌/无量的 T+1 不计入
   - 题材用开盘啦 stock_sector_map（801 开头），按当天有效区间取值，不用之后才出现的归属。
     父子板块来自开盘啦 SonPlate：股票落在子板块上写成「父 / 分支」
-  - 首板是提前埋伏：买在分歧，卖在一致。题材还在聚集、正在分歧，或刚启动才留；
-    发酵和高潮是兑现，不进首板。形态仍是缩量后连续放量、急跌后放量上影、连板后跌出空间，
-    或题材还没热、同板块一起放量。二板是接力：只留题材还可能延续的阶段，高潮不接力
+  - 可能的一板只留技术形态：缩量后连续放量上影、急跌后放量上影、连板后跌出空间。
+    不按消息、不按板块一起放量来取舍。名单按板块计数。二板和风向个股不再输出。
 
 不依赖 sklearn：numpy 手写 Adam + 标准化，概率由逻辑回归直接给出。
 
@@ -904,12 +903,10 @@ def predict(conn, target_date: Optional[date] = None,
         & (df["is_lu"] | df["cum60"].notna())
     )
     m1_train = eligible & df["next_ok"].fillna(False) & (~df["is_lu"])
-    m2_train = eligible & df["next_ok"].fillna(False) & df["is_first"]
     m1_target = eligible & (~df["is_lu"]) & (df["date"] == target_date)
-    m2_target = eligible & df["is_first"] & (df["date"] == target_date)
 
     model1, ev1, tgt1 = _fit_predict(df, "next_lu", m1_train, m1_target, split_date)
-    model2, ev2, tgt2 = _fit_predict(df, "next_lu", m2_train, m2_target, split_date)
+    ev2 = None
 
     zt_today = load_zt_today(conn, target_date)
     zb_today = load_zb_today(conn, target_date)
@@ -933,25 +930,8 @@ def predict(conn, target_date: Optional[date] = None,
             tags[code] = g["sector_code"].tolist()
 
     tgt1 = _screen(tgt1, df, labels, "first", stirred, tags)
-    tgt2 = _screen(tgt2, df, labels, "second")
-    if tgt1 is not None and len(tgt1):
-        # 每个还没热的题材最多留两只放量最清楚的，避免一个大标签占满名单。
-        rot_mask = tgt1["pattern_kind"].fillna("").str.startswith("题材刚异动")
-        rot_all = tgt1[rot_mask]
-        parts = []
-        for sec in sorted(stirred, key=lambda s: -stirred[s]["rate"]):
-            sub = rot_all[rot_all["rot_code"] == sec]
-            if sub.empty:
-                continue
-            parts.append(sub.sort_values("vol_ratio5", ascending=False).head(2))
-            if sum(len(p) for p in parts) >= 6:
-                break
-        rot = pd.concat(parts).head(6) if parts else rot_all.iloc[0:0]
-        pat = tgt1[~rot_mask].sort_values("score_raw", ascending=False)
-        pat = pat[~pat["code"].isin(set(rot["code"]))].head(max(top_first - len(rot), 0))
-        tgt1 = pd.concat([pat, rot])
-    first = _pack(tgt1, top_first, zt_map, zb_map, fund_map, labels, "first")
-    second = _pack(tgt2, top_second, zt_map, zb_map, fund_map, labels, "second")
+    first = _pack(tgt1, max(len(tgt1), 1), zt_map, zb_map, fund_map, labels, "first")
+    second = []
 
     # 按题材归组；“无题材归属”永远放最后
     def group(items):
@@ -963,8 +943,8 @@ def predict(conn, target_date: Optional[date] = None,
                                        "phase": it["phase"], "candidates": []})
             node["candidates"].append(it)
         return sorted(g.values(), key=lambda x: (x["theme"] == "无题材归属",
-                                                 -max(c["prob"] for c in x["candidates"]),
-                                                 -x["zt_today"]))
+                                                 -len(x["candidates"]),
+                                                 -max(c["prob"] for c in x["candidates"])))
 
     market = _market_snapshot(df, target_date, zt_today, zb_today, dt_today)
     next_td = _next_trade_date(conn, target_date)
@@ -984,12 +964,7 @@ def predict(conn, target_date: Optional[date] = None,
 
     panic = _panic_watch(df, target_date, max_mv)
     gaps = _data_gaps(df, zt_today, target_date, themes, fund)
-    auc2 = (ev2 or {}).get("auc")
-    if auc2 is not None and auc2 < 0.65:
-        gaps.append(
-            f"二板模型 AUC {auc2}，排序仍然弱于首板。二板只留题材还在延续的阶段"
-        )
-    watchlist = _watchlist(mem, stats, tree, df, zt_today, target_date, first, second)
+    watchlist = []
     live_track = _live_track(conn)
 
     return {
@@ -1001,10 +976,15 @@ def predict(conn, target_date: Optional[date] = None,
         "first_board": {
             "groups": group(first),
             "n_candidates": len(tgt1),
+            "sector_counts": [
+                {"theme": g["theme"], "n": len(g["candidates"])}
+                for g in group(first)
+            ],
         },
         "second_board": {
-            "groups": group(second),
-            "n_candidates": len(tgt2),
+            "groups": [],
+            "n_candidates": 0,
+            "sector_counts": [],
         },
         "risk": {
             "high_board": highs[:8],
@@ -1277,36 +1257,12 @@ def _screen(tgt: pd.DataFrame, df: pd.DataFrame, labels: dict, kind: str,
     stirred = stirred or {}
     tags = tags or {}
     if kind != "first":
-        keep = []
-        for idx, r in out.iterrows():
-            lab = labels.get(r["code"]) or {}
-            if lab.get("phase") in RELAY_PHASES:
-                keep.append(idx)
-        return out.loc[keep]
+        return out.iloc[0:0]
     keep = []
     for idx, r in out.iterrows():
-        lab = labels.get(r["code"]) or {}
-        phase = lab.get("phase") or ""
         pattern_ok = bool(r["pattern_ok"]) if pd.notna(r["pattern_ok"]) else False
-        if pattern_ok and phase in AMBUSH_PHASES:
+        if pattern_ok:
             keep.append(idx)
-            continue
-        sealed = bool(r["is_lu"]) if pd.notna(r["is_lu"]) else False
-        if sealed or not (pd.notna(r["pct"]) and pd.notna(r["vol_ratio5"])
-                          and r["pct"] >= 3 and r["vol_ratio5"] >= 1.5):
-            continue
-        hit = [stirred[s] | {"code": s} for s in tags.get(r["code"], ()) if s in stirred]
-        if not hit:
-            continue
-        chosen = max(hit, key=lambda x: x["rate"])
-        out.at[idx, "rot_code"] = chosen["code"]
-        out.at[idx, "rot_theme"] = chosen["name"]
-        out.at[idx, "rot_phase"] = chosen["phase"]
-        out.at[idx, "rot_zt"] = chosen["zt"]
-        out.at[idx, "rot_height"] = chosen["height"]
-        out.at[idx, "rot_zt3"] = chosen.get("zt3") or []
-        out.at[idx, "pattern_kind"] = f"题材刚异动、同板块{chosen['n']}只一起放量"
-        keep.append(idx)
     return out.loc[keep]
 
 
@@ -1567,7 +1523,7 @@ def render_markdown(r: dict) -> str:
     m = r["market"]
     nxt = r.get("next_trade_date") or "下一交易日"
     lines = []
-    lines.append(f"## 明日首板/二板预测（基准日 {r['as_of']} 收盘 → {nxt}）\n")
+    lines.append(f"## 明日可能的一板（基准日 {r['as_of']} 收盘 → {nxt}）\n")
     lines.append(
         f"**情绪底座**：涨停 **{m['limit_up']}** / 跌停 **{m['limit_down']}** / "
         f"最高 **{m['max_board']}** 板 / 封板率 **{m['seal_rate']}%** / "
@@ -1579,15 +1535,12 @@ def render_markdown(r: dict) -> str:
         extra += (f" / 昨日首板今日晋级率 **{m['yesterday_first_promote']}%**"
                   f"（{m['yesterday_first_n']} 进 {round(m['yesterday_first_promote'] * m['yesterday_first_n'] / 100)}）")
     lines.append(f"\n{extra}")
-    lines.append(f"\n基准：全市场个股明日涨停率约 **{m['base_first_board_pct']}%**；"
-                 f"今日首板明日晋级二板的历史基准约 **{r['model']['second']['base_rate']:.1f}%**。"
+    lines.append(f"\n基准：全市场个股明日涨停率约 **{m['base_first_board_pct']}%**。"
                  f"概率 = 同一交易日候选排名对应的历史晋级率（近 35 个交易日回算）。\n")
 
     for key, title, note in (
-        ("second_board", "二板候选（今日首板 → 明日二板）",
-         "二板是接力，看题材还有没有延续。只留开始聚焦、启动、发酵。高潮是一致兑现，不接力；分歧是延续断了，也不留。开盘一致性兑现，别在跳空上追。"),
-        ("first_board", "首板候选（今日未涨停 → 明日首板）",
-         "一板是提前埋伏。买在分歧，卖在一致。题材还在聚集、正在分歧，或刚启动才留；发酵和高潮不进。形态是缩量后连续放量、急跌后放量上影，或连板后跌出空间。还有一路是题材还没热、同板块一起放量。过往龙头不另做限制。"),
+        ("first_board", "可能的一板（今日未涨停，且符合技术形态）",
+         "只看技术形态：缩量后连续放量上影、急跌后放量上影、连板后连续下跌跌出空间。不看消息，也不看板块有没有一起动。下面每个板块标题上的数字是这一形态里有几只。"),
     ):
         lines.append(f"\n### {title}\n")
         lines.append(f"_{note}_\n")
@@ -1595,10 +1548,10 @@ def render_markdown(r: dict) -> str:
         if not groups:
             lines.append("无合格候选。\n")
             continue
+        counts = "、".join(f"{g['theme']} {len(g['candidates'])}只" for g in groups)
+        lines.append(f"板块只数：{counts}\n")
         for g in groups:
-            seq = "→".join(str(x) for x in g["zt3"]) if g["zt3"] else "-"
-            lines.append(f"\n**{g['theme']}** ｜ 今日涨停 {g['zt_today']} 只（近3日 {seq}）"
-                         f"｜ 最高 {g['height']} 板 ｜ {g['phase']}\n")
+            lines.append(f"\n**{g['theme']}** ｜ {len(g['candidates'])} 只\n")
             for c in g["candidates"]:
                 reason = "；".join(c["reasons"]) if c["reasons"] else "无显著特征"
                 lines.append(
@@ -1620,7 +1573,7 @@ def render_markdown(r: dict) -> str:
         lines.append("- **恐慌反手观察**：今日无 3 日跌≥8%+放量的标的，不需要准备反手买。")
 
     lines.append("\n### 模型可信度与缺口\n")
-    for k, label in (("first", "首板"), ("second", "二板")):
+    for k, label in (("first", "首板"),):
         e = r["model"][k]
         extra = f"，AUC {e['auc']}" if "auc" in e else ""
         top = next((x for x in e.get("topk", []) if x["k"] == 10), None) if e.get("topk") else None

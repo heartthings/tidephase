@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""取当日预测，生成风向个股、可能的一板、可能的二板三张图，发到飞书文字简报所在的群。"""
+"""取当日预测，生成可能的一板这一张图，发到飞书文字简报所在的群。"""
 from __future__ import annotations
 
 import json
@@ -35,9 +35,7 @@ def _read_token() -> str:
 PUSH = _machine_path("feishu_push")
 MARKER_DIR = _machine_path("brief_dir") or (ROOT / "data" / "briefs")
 TITLES = {
-    "leaders": "观势 · 风向个股",
     "first": "观势 · 可能的一板",
-    "second": "观势 · 可能的二板",
 }
 
 
