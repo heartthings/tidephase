@@ -474,7 +474,8 @@ async def read_predictions(
     limit: int = Query(default=500, le=5000),
 ):
     """预测全量读。status 是 result 的别名，观势按 status=pending 过滤。"""
-    conn = _get_reader_conn()
+    from data_api.mind_db import get_mind_reader_conn
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = "SELECT * FROM prediction WHERE 1=1"
         params = []

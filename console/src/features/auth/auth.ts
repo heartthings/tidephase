@@ -153,17 +153,5 @@ export function resetAuth() {
   // 清除查询缓存
   queryClient.clear();
 
-  const location = router.reactRouter.state.location;
-
-  const fullPath = location.pathname + location.search + location.hash;
-  // 获取当前路径
-  const currentPath = location.pathname + location.search;
-  const isLoginPage = currentPath.includes('/login');
-
-  // 如果不是登录页，跳转到登录页并带上 redirect 参数
-  if (!isLoginPage) {
-    router.push('/login', { query: { redirect: fullPath }, replace: true });
-  } else {
-    router.replace('/login');
-  }
+  router.replace(globalConfig.homePath);
 }

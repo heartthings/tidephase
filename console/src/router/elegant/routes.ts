@@ -42,7 +42,7 @@ export const generatedRoutes: ElegantConstRoute[] = [
               constant: true,
               i18nKey: 'route.(base)_capital-flow',
               icon: 'mdi:chart-bubble',
-              order: 4,
+              order: 5,
               title: 'capital-flow'
             }
           },
@@ -50,7 +50,7 @@ export const generatedRoutes: ElegantConstRoute[] = [
             matchedFiles: [null, '/src/pages/(base)/catalyst/index.tsx', null, null],
             name: '(base)_catalyst',
             path: '/catalyst',
-            handle: { constant: true, i18nKey: 'route.(base)_catalyst', icon: 'mdi:radar', order: 6, title: 'catalyst' }
+            handle: { constant: true, i18nKey: 'route.(base)_catalyst', icon: 'mdi:radar', order: 7, title: 'catalyst' }
           },
           {
             matchedFiles: [null, '/src/pages/(base)/home/index.tsx', null, null],
@@ -65,6 +65,18 @@ export const generatedRoutes: ElegantConstRoute[] = [
             }
           },
           {
+            matchedFiles: [null, '/src/pages/(base)/floor/index.tsx', null, null],
+            name: '(base)_floor',
+            path: '/floor',
+            handle: {
+              constant: true,
+              i18nKey: 'route.(base)_floor',
+              icon: 'mdi:stairs-up',
+              order: 2,
+              title: 'floor'
+            }
+          },
+          {
             matchedFiles: [null, '/src/pages/(base)/interval-stats/index.tsx', null, null],
             name: '(base)_interval-stats',
             path: '/interval-stats',
@@ -72,7 +84,7 @@ export const generatedRoutes: ElegantConstRoute[] = [
               constant: true,
               i18nKey: 'route.(base)_interval-stats',
               icon: 'mdi:chart-timeline-variant',
-              order: 5,
+              order: 6,
               title: 'interval-stats'
             }
           },

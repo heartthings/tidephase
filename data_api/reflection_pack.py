@@ -248,7 +248,7 @@ def _jsonb_to_python(val) -> Any:
 
 # ─── S1: 决策时点四维快照 ─────────────────────────────────────────────
 
-def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, gaps: list) -> dict:
+def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, gaps: list, mcur=None) -> dict:
     """S1 决策时点快照."""
     result = {}
     nearest = _nearest_trade_day(trade_days, decision_date)
@@ -429,14 +429,14 @@ def _build_s1(cur, decision_date: date, trade_days: list, reasoning_trace: Any, 
         if ids:
             placeholders = ",".join(["%s"] * len(ids))
             try:
-                cur.execute(f"""
+                mcur.execute(f"""
                     SELECT cognition_id, version, title, status, validations, falsifications, derives_from, created_at
                     FROM cognition
                     WHERE cognition_id IN ({placeholders})
                       AND created_at <= %s
                     ORDER BY cognition_id, version DESC
                 """, list(ids) + [datetime.combine(decision_date, datetime.max.time()).replace(tzinfo=TZ_CST)])
-                result["cognition_refs"] = [dict(r) for r in cur.fetchall()]
+                result["cognition_refs"] = [dict(r) for r in mcur.fetchall()]
             except Exception as e:
                 gaps.append({"section": "S1", "code": "COGNITION_REF_ERROR", "reason": str(e), "affected": "S1.cognition"})
 
@@ -556,7 +556,7 @@ def _build_s2(cur, prediction: dict, window_start: date, window_end: date,
 # ─── S3: 归因证据 ────────────────────────────────────────────────────
 
 def _build_s3(cur, prediction: dict, decision_date: date, window_start: date,
-              window_end: date, reasoning_trace: Any, gaps: list) -> dict:
+              window_end: date, reasoning_trace: Any, gaps: list, mcur=None) -> dict:
     """S3 归因证据."""
     result = {}
 
@@ -632,14 +632,14 @@ def _build_s3(cur, prediction: dict, decision_date: date, window_start: date,
         if ids:
             placeholders = ",".join(["%s"] * len(ids))
             try:
-                cur.execute(f"""
+                mcur.execute(f"""
                     SELECT cognition_id, version, title, statement, status,
                            validations, falsifications, derives_from, created_at
                     FROM cognition
                     WHERE cognition_id IN ({placeholders})
                     ORDER BY cognition_id, version
                 """, list(ids))
-                result["cognition_history"] = [dict(r) for r in cur.fetchall()]
+                result["cognition_history"] = [dict(r) for r in mcur.fetchall()]
             except Exception as e:
                 gaps.append({"section": "S3", "code": "COGNITION_HIST_ERROR",
                               "reason": str(e), "affected": "S3.cognition"})
@@ -731,7 +731,7 @@ def _build_s4(cur, prediction: dict, gaps: list) -> list:
 
 # ─── Main assembly ────────────────────────────────────────────────────
 
-def assemble_reflection_pack(get_conn_fn, decision_id: str,
+def assemble_reflection_pack(get_conn_fn, decision_id: str, get_mind_conn_fn,
                              window_start_override: Optional[str] = None,
                              window_end_override: Optional[str] = None,
                              sections_override: Optional[str] = None) -> dict:
@@ -742,11 +742,14 @@ def assemble_reflection_pack(get_conn_fn, decision_id: str,
     gaps = []
     conn = get_conn_fn()
     conn.autocommit = True  # 避免单条查询失败导致整个事务 abort
+    mconn = get_mind_conn_fn()
+    mconn.autocommit = True
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur, \
+                mconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as mcur:
             # 1. 查 prediction
-            cur.execute("SELECT * FROM prediction WHERE prediction_id = %s", (decision_id,))
-            pred_row = cur.fetchone()
+            mcur.execute("SELECT * FROM prediction WHERE prediction_id = %s", (decision_id,))
+            pred_row = mcur.fetchone()
             if not pred_row:
                 return {"error": "PACK_DECISION_NOT_FOUND", "decision_id": decision_id}
             prediction = dict(pred_row)
@@ -800,7 +803,7 @@ def assemble_reflection_pack(get_conn_fn, decision_id: str,
             if "s1" in sections_to_build:
                 sections["S1_snapshot_at_decision"] = _build_s1(
                     cur, decision_date, trade_days,
-                    prediction.get("reasoning_trace"), gaps
+                    prediction.get("reasoning_trace"), gaps, mcur
                 )
             if "s2" in sections_to_build:
                 sections["S2_falsify_actuals"] = _build_s2(
@@ -809,10 +812,10 @@ def assemble_reflection_pack(get_conn_fn, decision_id: str,
             if "s3" in sections_to_build:
                 sections["S3_attribution"] = _build_s3(
                     cur, prediction, decision_date, ws, we,
-                    prediction.get("reasoning_trace"), gaps
+                    prediction.get("reasoning_trace"), gaps, mcur
                 )
             if "s4" in sections_to_build:
-                sections["S4_base_rate_peer"] = _build_s4(cur, prediction, gaps)
+                sections["S4_base_rate_peer"] = _build_s4(mcur, prediction, gaps)
 
             # 5. 序列化 prediction (处理 datetime/date)
             pred_out = {}
@@ -837,3 +840,4 @@ def assemble_reflection_pack(get_conn_fn, decision_id: str,
             }
     finally:
         conn.close()
+        mconn.close()

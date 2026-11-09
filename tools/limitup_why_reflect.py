@@ -49,6 +49,22 @@ def _conn(role="reader"):
     )
 
 
+def _mind_conn(role="reader"):
+    sec = yaml.safe_load(SECRETS.read_text())["mind"]
+    return psycopg2.connect(
+        host=sec.get("host", "127.0.0.1"), port=int(sec.get("port", 15433)), dbname=sec.get("name", "mind"),
+        user=f"mind_{role}", password=sec[f"{role}_password"],
+    )
+
+
+def _existing_iterative() -> list[dict]:
+    conn = _mind_conn()
+    try:
+        return _existing(conn.cursor())
+    finally:
+        conn.close()
+
+
 def _day(cur, day: str | None) -> str:
     if day:
         return day
@@ -365,7 +381,7 @@ def pack(day: str | None) -> dict:
             "recent": recent,
             "intraday": _intraday(dt_minutes.get(code, [])),
         })
-    existing = _existing(cur)
+    existing = _existing_iterative()
     conn.close()
     return {
         "as_of": day,
@@ -425,30 +441,33 @@ def commit(payload: dict) -> dict:
             "not_in_pool": extra,
         }, ensure_ascii=False))
 
-    cur.execute(
+    reader.close()
+    mind = _mind_conn()
+    mcur = mind.cursor()
+    mcur.execute(
         """
         SELECT cognition_id FROM cognition
         WHERE type = 'constitution' AND status = 'active'
           AND cognition_id ~ '^F-[0-9]{3}$'
         """
     )
-    f_ids = {r[0] for r in cur.fetchall()}
-    existing = {row["title"]: row for row in _existing(cur)}
-    cur.execute(
+    f_ids = {r[0] for r in mcur.fetchall()}
+    existing = {row["title"]: row for row in _existing(mcur)}
+    mcur.execute(
         """
         SELECT cognition_id FROM cognition
         WHERE cognition_id ~ '^H-[0-9]{3}$'
         """
     )
-    used = {r[0] for r in cur.fetchall()}
-    reader.close()
+    used = {r[0] for r in mcur.fetchall()}
+    mind.close()
 
     nxt = 1
     for cid in used:
         nxt = max(nxt, int(cid.split("-")[1]) + 1)
 
     written = []
-    conn = _conn("d12")
+    conn = _mind_conn("writer")
     wcur = conn.cursor()
     for it in items:
         title = str(it.get("title") or "").strip()
@@ -503,10 +522,10 @@ def commit(payload: dict) -> dict:
                 INSERT INTO cognition (
                     cognition_id, version, type, title, statement, source,
                     confidence, validations, falsifications, derives_from,
-                    status, actor)
+                    status, actor, domain, subdomain, agent, importance)
                 VALUES (%s, %s, 'iterative', %s, %s, %s,
                         NULL, %s::jsonb, %s::jsonb, %s::jsonb,
-                        'candidate', 'yan')
+                        'candidate', 'yan', 'investing', 'guanshi', 'guanshi', 4)
                 """,
                 (
                     prev["cognition_id"], version, title,
@@ -536,10 +555,10 @@ def commit(payload: dict) -> dict:
             INSERT INTO cognition (
                 cognition_id, version, type, title, statement, source,
                 confidence, validations, falsifications, derives_from,
-                status, actor)
+                status, actor, domain, subdomain, agent, importance)
             VALUES (%s, 1, 'iterative', %s, %s, %s,
                     NULL, %s::jsonb, %s::jsonb, %s::jsonb,
-                    'candidate', 'yan')
+                    'candidate', 'yan', 'investing', 'guanshi', 'guanshi', 4)
             """,
             (
                 cid, title, statement, f"yan当日涨停反思 {day}",

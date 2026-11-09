@@ -227,13 +227,13 @@ jobs:
   - job_name: j_radar
     domain: D8
     target_tables: [radar_event]
-    schedule_cron: "*/30 9-15 * * 1-5"
+    schedule_cron: "*/5 9-15 * * 1-5"
     source_chain: ["longhu"]
     retry_policy: {"tries": 2, "backoff_s": [5, 30]}
     timeout_s: 120
     critical: false
     enabled: true
-    note: "市场雷达盘中*/30（longhu适配器已就绪）"
+    note: "开盘啦大盘直播，写入市场雷达。交易时段每5分钟。不再采集旧的 HomeDingPan Radar"
 
   - job_name: j_market_messages_hot
     domain: D9

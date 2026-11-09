@@ -6,6 +6,7 @@
 
 export * from './auth';
 export * from './catalyst';
+export * from './desk';
 export * from './home';
 export * from './market';
 export * from './note';

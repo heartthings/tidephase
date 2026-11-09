@@ -1,153 +1,84 @@
-import { DatePicker, List } from 'antd';
+import { DatePicker, Input } from 'antd';
 import dayjs from 'dayjs';
+import { useMemo, useState } from 'react';
 
-import { themeColors } from '@/features/theme';
-import { useMobile } from '@/hooks/common/mobile';
-import { useMarketRadars } from '@/service/hooks/useMarket';
+import { Panel } from '@/features/desk/Panel';
+import '@/features/desk/desk.css';
+import { useConsoleDesk } from '@/service/hooks/useDesk';
 
 const MarketRadar = () => {
-  const isMobile = useMobile();
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [keyword, setKeyword] = useState('');
+  const { data, isLoading } = useConsoleDesk(date);
 
-  const { data, isLoading } = useMarketRadars(date);
-  const colors = useAppSelector(themeColors);
-
-  const list = (data || []).filter(item => {
-    const text = `${item.stockName} ${item.lbStatus} ${item.status} ${item.content}`.toLowerCase();
-    return text.includes(keyword.toLowerCase());
-  });
-
-  function highlightContent(text: string) {
-    const parts = text.split(/(减少|\d+(?:\.\d+)?%?)/g);
-    return (
-      <div className="whitespace-pre-wrap">
-        {parts.map((p, i) => {
-          if (p === '减少') {
-            return (
-              <ATypography.Text
-                key={i}
-                type="success"
-              >
-                {p}
-              </ATypography.Text>
-            );
-          }
-          if (/^(\d+(?:\.\d+)?%?)$/.test(p)) {
-            return (
-              <ATypography.Text
-                key={i}
-                style={{ color: colors.primary }}
-              >
-                {p}
-              </ATypography.Text>
-            );
-          }
-          return <span key={i}>{p}</span>;
-        })}
-      </div>
-    );
-  }
+  const list = useMemo(() => {
+    const rows = data?.live || [];
+    const q = keyword.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(item => `${item.plate} ${item.content} ${(item.stocks || []).join(' ')}`.toLowerCase().includes(q));
+  }, [data, keyword]);
 
   return (
-    <ACard
-      title="市场雷达"
-      extra={
-        <ASpace
-          align={isMobile ? 'end' : 'center'}
-          direction={isMobile ? 'vertical' : 'horizontal'}
-        >
+    <div className="gs-desk space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="m-0 text-24px">大盘直播</h1>
+          <p className="m-0 mt-1 text-13px text-[var(--gs-muted)]">开盘啦 ZhiBoContent，按时间倒序。有板块就亮板块，数字在飞书推送里另做高亮。</p>
+        </div>
+        <div className="flex gap-2">
           <DatePicker
+            allowClear={false}
             value={dayjs(date)}
             onChange={d => setDate(d?.format('YYYY-MM-DD') || dayjs().format('YYYY-MM-DD'))}
           />
-          <AInput
+          <Input
             allowClear
-            placeholder="搜索关键词"
+            placeholder="搜板块 / 内容 / 个股"
+            style={{ width: 220 }}
             value={keyword}
             onChange={e => setKeyword(e.target.value)}
           />
-        </ASpace>
-      }
-    >
-      {isMobile ? (
-        <List
-          dataSource={list}
-          loading={isLoading}
-          renderItem={item => (
-            <List.Item>
-              <ACard
-                size="small"
-                style={{ width: '100%' }}
-              >
-                <div className="mb-2 text-xs text-gray-400">{item.time}</div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="font-bold">
-                    {item.stockName} <span className="text-gray-500 font-normal">({item.lbStatus})</span>
-                  </span>
-                  <ATag>{item.status}</ATag>
+        </div>
+      </div>
+
+      <Panel
+        hint={isLoading ? '加载中' : `${list.length} 条`}
+        title={date}
+      >
+        {list.length === 0 ? (
+          <div className="gs-empty">这一天还没有直播</div>
+        ) : (
+          list.map(item => (
+            <div
+              className="gs-live-item"
+              key={item.id}
+            >
+              <div className="gs-live-meta">
+                <span>{item.time}</span>
+                {item.plate && item.plate !== '大盘' && item.plate !== '大盘直播' ? (
+                  <span className="gs-live-plate">{item.plate}</span>
+                ) : null}
+                {item.pct ? <span className="gs-up">{item.pct}</span> : null}
+              </div>
+              <div className="whitespace-pre-wrap text-13px leading-relaxed">{item.content}</div>
+              {item.stocks && item.stocks.length > 0 ? (
+                <div className="gs-chip-row">
+                  {item.stocks.map(name => (
+                    <span
+                      className="gs-chip"
+                      key={name}
+                    >
+                      {name}
+                    </span>
+                  ))}
                 </div>
-                <div>{highlightContent(item.content)}</div>
-              </ACard>
-            </List.Item>
-          )}
-        />
-      ) : (
-        <ATable
-          dataSource={list}
-          loading={isLoading}
-          pagination={false}
-          rowKey="id"
-          size="small"
-          tableLayout="fixed"
-          columns={[
-            {
-              align: 'center',
-              dataIndex: 'time',
-              key: 'time',
-              title: '事件时间',
-              width: 160
-            },
-            {
-              key: 'stockName',
-              render: (_: any, r: any) => `${r.stockName}（${r.lbStatus}）`,
-              title: '股票名称'
-            },
-            {
-              dataIndex: 'status',
-              key: 'status',
-              title: '事件状态',
-              width: 140
-            },
-            {
-              dataIndex: 'content',
-              key: 'content',
-              render: (v: string) => highlightContent(v),
-              title: '事件内容'
-            }
-          ]}
-          onRow={(_, index) => ({
-            style: Number(index ?? 0) % 2 === 1 ? { backgroundColor: toRGBA(colors.primary, 0.06) } : undefined
-          })}
-        />
-      )}
-    </ACard>
+              ) : null}
+            </div>
+          ))
+        )}
+      </Panel>
+    </div>
   );
 };
-
-function toRGBA(hex: string, alpha = 1) {
-  const clean = hex.replace('#', '');
-  const full =
-    clean.length === 3
-      ? clean
-          .split('')
-          .map(c => c + c)
-          .join('')
-      : clean;
-  const r = Number.parseInt(full.substring(0, 2), 16);
-  const g = Number.parseInt(full.substring(2, 4), 16);
-  const b = Number.parseInt(full.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export default MarketRadar;

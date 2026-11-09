@@ -64,6 +64,8 @@ def get_applied(conn):
             return {row[0] for row in cur.fetchall()}
         except psycopg2.errors.UndefinedTable:
             return set()
+        finally:
+            conn.rollback()
 
 
 def run_migration(conn, filepath, applied):

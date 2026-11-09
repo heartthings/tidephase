@@ -1,4 +1,4 @@
-# 只读查看 market_tsdb。不随主 compose 启动。
+# 只读查看 market_tsdb 和心库 mind。不随主 compose 启动。
 # 宿主机仅 127.0.0.1:3000。不暴露数据库和 data-api。
 # 对外访问时把 GF_SERVER_ROOT_URL 设成自己的地址。
 
@@ -24,11 +24,15 @@ services:
       - ./provisioning:/etc/grafana/provisioning:ro
     networks:
       - market-net
+      - mind-net
 
 networks:
   market-net:
     external: true
     name: ops_market-net
+  mind-net:
+    external: true
+    name: mind-net
 
 volumes:
   grafana_data:

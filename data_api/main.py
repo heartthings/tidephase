@@ -31,6 +31,8 @@ from data_api.reflection_pack import (
 from fastapi.middleware.cors import CORSMiddleware
 
 from data_api.lovetrade_routes import router as lovetrade_router
+from data_api.console_desk import router as console_desk_router
+from data_api.mind_db import MIND_TABLES, get_mind_reader_conn, get_mind_writer_conn
 from data_api.public_boards import router as public_boards_router
 from data_api.z7ext_routes import router as z7ext_router, init_auth as z7ext_init_auth
 
@@ -268,6 +270,7 @@ app.add_middleware(
 # Z8 W2: 注册 lovetrade 路由
 app.include_router(lovetrade_router)
 app.include_router(public_boards_router)
+app.include_router(console_desk_router)
 
 # Z7-ext: 注册催化雷达路由（需要在 auth 函数定义之后初始化）
 z7ext_init_auth(require_read, require_write, get_reader_conn, get_d12writer_conn)
@@ -412,7 +415,7 @@ async def base_rate_query(
     _=Depends(require_read)
 ):
     """E8 基率查询 · 口径1-5 · docs/base_rate_calibration_spec.md"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = "SELECT * FROM base_rate WHERE 1=1"
         params = []
@@ -454,6 +457,7 @@ async def reflection_pack(
     """
     pack = assemble_reflection_pack(
         get_reader_conn, decision_id,
+        get_mind_conn_fn=get_mind_reader_conn,
         window_start_override=window_start,
         window_end_override=window_end,
         sections_override=section,
@@ -614,7 +618,7 @@ async def data_query(
         return error_response("TABLE_NOT_ALLOWED", f"Table '{table}' not in whitelist", 403)
 
     # 构造安全 SQL
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn() if table in MIND_TABLES else get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # 字段白名单
         select_fields = "*"
@@ -874,7 +878,7 @@ async def calibration_query(
     _=Depends(require_read)
 ):
     """E9 校准视图 · 口径4 · 按月分桶"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = 'SELECT * FROM calibration_view WHERE 1=1'
         params = []
@@ -922,7 +926,7 @@ async def create_cognition(
         if not body.get(field):
             return error_response("BAD_PARAM", f"'{field}' is required", 400)
 
-    conn = get_d12writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         # 重复检测
         cur.execute("SELECT version FROM cognition WHERE cognition_id = %s ORDER BY version DESC LIMIT 1", (cid,))
@@ -935,8 +939,9 @@ async def create_cognition(
         cur.execute("""
             INSERT INTO cognition (cognition_id, version, type, title, statement, source,
                                    confidence, regime_scope, validations, falsifications,
-                                   derives_from, status, actor)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   derives_from, status, actor, domain, subdomain, agent, importance)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'investing', 'guanshi', 'guanshi',
+                    CASE WHEN %s = 'constitution' THEN 5 WHEN %s LIKE 'H-%%' THEN 4 ELSE 3 END)
         """, (
             cid, version, body["type"], body["title"], body["statement"], body["source"],
             body.get("confidence"),
@@ -946,6 +951,7 @@ async def create_cognition(
             json.dumps(body.get("derives_from")) if body.get("derives_from") else None,
             body.get("status", "active"),
             body.get("actor", "guanshi"),
+            body["type"], cid,
         ))
     conn.commit()
     conn.close()
@@ -976,7 +982,7 @@ async def create_prediction(
     if horizon and horizon not in ("T1", "T3", "T5", "W1"):
         return error_response("BAD_PARAM", "horizon must be T1/T3/T5/W1", 400)
 
-    conn = get_d12writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         # 重复检测
         cur.execute("SELECT prediction_id FROM prediction WHERE prediction_id = %s", (pid,))
@@ -1111,7 +1117,7 @@ async def update_prediction_result(
     if not result_note:
         return error_response("BAD_PARAM", "result_note is required for manual override", 400)
 
-    conn = get_d12writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         cur.execute("""
             UPDATE prediction
@@ -1136,7 +1142,7 @@ async def prediction_due(
     _=Depends(require_read)
 ):
     """E13 到期待验清单。"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = """
             SELECT prediction_id, statement, category, confidence_pct, check_date,
@@ -1216,7 +1222,7 @@ async def create_reflection(
         if err is not None:
             return err
 
-    conn = get_d12writer_conn()
+    conn = get_mind_writer_conn()
     inserted_ids = []
     has_evidence_refs = False
     try:
@@ -1283,7 +1289,7 @@ async def reflection_recent(
     _=Depends(require_read)
 ):
     """Z7b 近 N 天反思记录（默认30，上限365），closed_at 倒序。"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
             SELECT * FROM reflection
@@ -1305,7 +1311,7 @@ async def reflection_action_items(
     if status != "all" and status not in VALID_ACTION_STATUSES:
         return error_response("BAD_PARAM", f"status must be open/done/waived/all, got '{status}'", 400)
 
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         if status == "all":
             cur.execute("""

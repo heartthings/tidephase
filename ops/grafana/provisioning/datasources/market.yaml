@@ -19,3 +19,21 @@ datasources:
       connMaxLifetime: 14400
     secureJsonData:
       password: $__env{MARKET_READER_PASSWORD}
+
+  - name: mind
+    uid: mind
+    type: postgres
+    access: proxy
+    url: mind-tsdb:5432
+    user: mind_reader
+    editable: false
+    jsonData:
+      database: mind
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: true
+      maxOpenConns: 3
+      maxIdleConns: 1
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: $__env{MIND_READER_PASSWORD}

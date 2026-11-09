@@ -1,8 +1,8 @@
 """
-j_radar - 市场雷达盘中采集（*/30 9-15 交易日）
+j_radar - 市场雷达采集开盘啦/开盘红大盘直播。
 
-龙虎 Radar / HomeDingPan。响应是当前列表，不是全天历史。
-字段：time(unix)、status、stock_name、stockid、content、LBstatus。
+端点 ZhiBoContent / ConceptionPoint。一次返回当天已经发出的直播，不是旧的市场雷达列表。
+旧的 HomeDingPan Radar 不再请求。
 """
 import json
 import logging
@@ -15,6 +15,7 @@ from dworker.core.degradation import JobContext, SourceError
 
 logger = logging.getLogger(__name__)
 TZ = timezone(timedelta(hours=8))
+SOURCE = "kaipanla_zhibo"
 
 
 def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, trigger="scheduled"):
@@ -30,72 +31,114 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
         return {"success": True, "source_used": "none", "rows_in": 0, "rows_written": 0, "rows_quarantined": 0, "note": note}
 
     t = now.hour * 100 + now.minute
-    if not (915 <= t <= 1131 or 1300 <= t <= 1501):
+    if trigger != "manual" and not (915 <= t <= 1510):
         note = "SKIP: outside trading hours"
         logger.info(f"[j_radar] {note}")
         return {"success": True, "source_used": "none", "rows_in": 0, "rows_written": 0, "rows_quarantined": 0, "note": note}
 
-    logger.info("[j_radar] Fetching market radar")
+    logger.info("[j_radar] Fetching kaipanla live broadcast")
     adapter = LonghuAdapter()
     ctx = JobContext("j_radar", "D8", ["radar_event"], {})
-    try:
-        result = adapter.fetch(ctx, {"endpoint": "Radar", "extra_params": {}})
-    except SourceError as e:
-        return {"success": False, "source_used": "longhu", "rows_in": 0, "rows_written": 0, "rows_quarantined": 0, "note": f"MISS: {e}"}
-
-    rows = result.rows or []
-    if not rows:
-        return {"success": False, "source_used": "longhu", "rows_in": 0, "rows_written": 0, "rows_quarantined": 0, "note": "MISS: no radar data"}
-
+    payload = {}
+    items = []
+    last_error = ""
+    for attempt in range(2):
+        try:
+            result = adapter.fetch(ctx, {"endpoint": "OpeningStockDynamicNews", "extra_params": {}})
+        except SourceError as e:
+            last_error = str(e)
+            time.sleep(3)
+            continue
+        payload = result.raw_payload or {}
+        items = payload.get("List") or []
+        if items:
+            break
+        last_error = "live broadcast empty"
+        time.sleep(3)
+    if not items:
+        return {"success": False, "source_used": SOURCE, "rows_in": 0, "rows_written": 0, "rows_quarantined": 0, "note": f"MISS: {last_error}"}
+    day = str(payload.get("date") or today)
     written = 0
     try:
         with conn.cursor() as cur:
-            for row in rows:
-                unix = row.get("time")
-                stockid = str(row.get("stockid") or "").strip()
-                status = str(row.get("status") or "")
-                if unix is None or not stockid:
+            for item in items:
+                row = _row(item)
+                if row is None:
                     continue
-                ts = datetime.fromtimestamp(int(unix), TZ)
-                event_id = f"{stockid}-{int(unix)}-{status}"
-                code = _norm_code(stockid)
-                extra = {
-                    "stock_name": row.get("stock_name"),
-                    "lb_status": row.get("LBstatus") or row.get("lb_status") or "",
-                    "status": status,
-                    "stockid": stockid,
-                    "content2": row.get("content2"),
-                }
                 cur.execute("""
                     INSERT INTO radar_event
                         (ts, event_id, event_type, title, content, related_codes, extra, source, ingest_ts)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'longhu', now())
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, now())
                     ON CONFLICT (ts, event_id) DO UPDATE SET
-                        title=EXCLUDED.title, content=EXCLUDED.content,
-                        related_codes=EXCLUDED.related_codes, extra=EXCLUDED.extra,
-                        source=EXCLUDED.source, ingest_ts=now()
+                        event_type=EXCLUDED.event_type,
+                        title=EXCLUDED.title,
+                        content=EXCLUDED.content,
+                        related_codes=EXCLUDED.related_codes,
+                        extra=EXCLUDED.extra,
+                        source=EXCLUDED.source,
+                        ingest_ts=now()
                 """, (
-                    ts, event_id, status or "radar", status, row.get("content") or "",
-                    json.dumps([code]) if code else None,
-                    json.dumps(extra, ensure_ascii=False),
+                    row["ts"], row["event_id"], row["event_type"], row["title"], row["content"],
+                    json.dumps(row["related_codes"], ensure_ascii=False),
+                    json.dumps(row["extra"], ensure_ascii=False),
+                    SOURCE,
                 ))
                 written += 1
         conn.commit()
     except Exception as e:
         conn.rollback()
         logger.warning(f"[j_radar] write failed: {e}")
-        return {"success": False, "source_used": "longhu", "rows_in": len(rows), "rows_written": 0, "rows_quarantined": 0, "note": f"EXCEPTION: {e}"}
+        return {"success": False, "source_used": SOURCE, "rows_in": len(items), "rows_written": 0, "rows_quarantined": 0, "note": f"EXCEPTION: {e}"}
 
     elapsed = time.time() - t0
-    note = f"radar written={written} elapsed={elapsed:.1f}s"
+    note = f"zhibo day={day} written={written} elapsed={elapsed:.1f}s"
     logger.info(f"[j_radar] {note}")
     return {
         "success": written > 0,
-        "source_used": "longhu",
-        "rows_in": len(rows),
+        "source_used": SOURCE,
+        "rows_in": len(items),
         "rows_written": written,
         "rows_quarantined": 0,
         "note": note,
+    }
+
+
+def _row(item: dict) -> dict | None:
+    comment = str(item.get("Comment") or "").strip()
+    unix = item.get("Time")
+    item_id = str(item.get("ID") or "").strip()
+    if not comment or unix is None or not item_id:
+        return None
+    plate = str(item.get("PlateName") or "").strip()
+    zdf = str(item.get("PlateZDF") or "").strip()
+    stocks = item.get("Stock") if isinstance(item.get("Stock"), list) else []
+    codes = []
+    names = []
+    for stock in stocks:
+        if isinstance(stock, list) and stock:
+            code = _norm_code(str(stock[0]))
+            if code:
+                codes.append(code)
+            if len(stock) > 1 and stock[1]:
+                names.append(str(stock[1]))
+    lb = ""
+    if zdf:
+        lb = zdf if zdf.endswith("%") else f"{zdf}%"
+    return {
+        "ts": datetime.fromtimestamp(int(unix), TZ),
+        "event_id": f"zhibo-{item_id}",
+        "event_type": plate or "大盘直播",
+        "title": plate or "大盘直播",
+        "content": comment,
+        "related_codes": codes,
+        "extra": {
+            "stock_name": plate or "大盘",
+            "lb_status": lb,
+            "status": "大盘直播",
+            "stocks": names[:8],
+            "plate_code": str(item.get("PlateCode") or ""),
+            "type": str(item.get("Type") or ""),
+        },
     }
 
 

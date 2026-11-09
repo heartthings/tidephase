@@ -68,6 +68,9 @@ def get_writer_conn():
     )
 
 
+from data_api.mind_db import get_mind_reader_conn, get_mind_writer_conn  # noqa: E402
+
+
 def envelope(data, rows=None):
     """Java 兼容响应格式: {code: 0, data: ..., message: 'ok'}
     web 端 isBackendSuccess 检查 code === '0'; transformBackendResponse 提取 data.
@@ -158,7 +161,7 @@ async def catalyst_predictions_list(
     authorization: str = None,
 ):
     """catalyst_predictions 列表（映射到 prediction 表 P- 前缀）"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = """SELECT prediction_id as id, created_at, statement, category,
                         confidence_pct, falsify, check_date, horizon, result, result_note
@@ -181,7 +184,7 @@ async def catalyst_predictions_list(
 @router.get("/api/catalyst/predictions/{prediction_id}")
 async def catalyst_prediction_get(prediction_id: str, authorization: str = None):
     """单个 prediction 详情"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM prediction WHERE prediction_id = %s", (prediction_id,))
         row = cur.fetchone()
@@ -251,7 +254,7 @@ async def catalyst_accuracy(
     authorization: str = None,
 ):
     """预测准确率聚合"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = """SELECT category, horizon,
                         COUNT(*) as total,
@@ -270,7 +273,7 @@ async def catalyst_accuracy(
             sql += " AND horizon = %s"
             params.append(horizon)
         sql += " GROUP BY category, horizon ORDER BY category, horizon"
-        cur.execute(sql, params)
+        cur.execute(sql, params or None)
         rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return envelope(rows)
@@ -285,8 +288,6 @@ async def catalyst_dashboard(authorization: str = None):
         cur.execute("""SELECT
             (SELECT COUNT(*) FROM catalyst_impact) as total_impacts,
             (SELECT COUNT(*) FROM catalyst_impact WHERE lifecycle_stage NOT IN ('decay','closed')) as active_impacts,
-            (SELECT COUNT(*) FROM prediction WHERE prediction_id LIKE 'P-%') as total_predictions,
-            (SELECT COUNT(*) FROM prediction WHERE prediction_id LIKE 'P-%' AND result='pending') as pending_predictions,
             (SELECT COUNT(*) FROM catalyst_system_state) as total_system_states
         """)
         overview = dict(cur.fetchone())
@@ -295,12 +296,20 @@ async def catalyst_dashboard(authorization: str = None):
                        FROM catalyst_impact
                        ORDER BY date DESC LIMIT 5""")
         recent_impacts = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    mconn = get_mind_reader_conn()
+    with mconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""SELECT
+            (SELECT COUNT(*) FROM prediction WHERE prediction_id LIKE 'P-%') as total_predictions,
+            (SELECT COUNT(*) FROM prediction WHERE prediction_id LIKE 'P-%' AND result='pending') as pending_predictions
+        """)
+        overview.update(dict(cur.fetchone()))
         # 最近 5 条 prediction
         cur.execute("""SELECT prediction_id as id, statement, result, check_date
                        FROM prediction WHERE prediction_id LIKE 'P-%'
                        ORDER BY created_at DESC LIMIT 5""")
         recent_predictions = [dict(r) for r in cur.fetchall()]
-    conn.close()
+    mconn.close()
     return envelope({
         "overview": overview,
         "recent_impacts": recent_impacts,
@@ -659,7 +668,7 @@ async def market_radars(
     """市场雷达列表"""
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        sql = "SELECT * FROM radar_event WHERE 1=1"
+        sql = "SELECT * FROM radar_event WHERE source = 'kaipanla_zhibo'"
         params = []
         if date:
             sql += " AND ts::date = %s"
@@ -757,7 +766,7 @@ async def market_radars_alias(date: str = None, limit: int = Query(default=200, 
     conn = get_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = """SELECT ts, event_id, event_type, title, content, extra
-                 FROM radar_event WHERE 1=1"""
+                 FROM radar_event WHERE source = 'kaipanla_zhibo'"""
         params = []
         if date:
             sql += " AND ts::date = %s"
@@ -871,7 +880,7 @@ async def notes_list(
     authorization: str = None,
 ):
     """笔记列表"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         sql = """SELECT n.*, c.name as category_name
                  FROM trading_note n LEFT JOIN note_category c ON n.category_id = c.id WHERE 1=1"""
@@ -890,7 +899,7 @@ async def notes_list(
 @router.get("/api/note/{note_id}")
 async def note_get(note_id: str, authorization: str = None):
     """笔记详情"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM trading_note WHERE id = %s", (note_id,))
         row = cur.fetchone()
@@ -910,7 +919,7 @@ class NoteCreate(BaseModel):
 @router.post("/api/note")
 async def note_create(note: NoteCreate, authorization: str = None):
     """创建笔记"""
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     note_id = f"note_{datetime.now().strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}"
     with conn.cursor() as cur:
         cur.execute("""INSERT INTO trading_note (id, category_id, title, content, tags, source, ingest_ts)
@@ -924,7 +933,7 @@ async def note_create(note: NoteCreate, authorization: str = None):
 @router.get("/api/note/category/enabled")
 async def note_categories_list(authorization: str = None):
     """笔记分类列表"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM note_category ORDER BY sort_order, name")
         rows = [dict(r) for r in cur.fetchall()]
@@ -1121,11 +1130,14 @@ async def home_summary(authorization: str = None):
         # 题材数
         cur.execute("SELECT COUNT(*) as cnt FROM topic")
         topic_cnt = cur.fetchone()["cnt"]
+    conn.close()
+    mconn = get_mind_reader_conn()
+    with mconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # 待验预测
         cur.execute("""SELECT COUNT(*) as cnt FROM prediction
                        WHERE prediction_id LIKE 'P-%' AND result = 'pending'""")
         pending_pred = cur.fetchone()["cnt"]
-    conn.close()
+    mconn.close()
     return envelope({
         "is_trading_day": is_trading,
         "latest_indices": indices,
@@ -1178,7 +1190,7 @@ async def note_count_month(
     authorization: str = None,
 ):
     """按月统计笔记数（web NOTE_URLS.COUNT_MONTH）"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         if month:
             cur.execute("""
@@ -1201,7 +1213,7 @@ async def note_count_month(
 @router.post("/api/note/{note_id}/top")
 async def note_top(note_id: str, authorization: str = None):
     """置顶/取消置顶笔记（web NOTE_URLS.TOP）"""
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         cur.execute("""
             UPDATE trading_note SET is_top = NOT COALESCE(is_top, false), updated_time = now()
@@ -1222,7 +1234,7 @@ async def note_update(request: Request, authorization: str = None):
     note_id = body.get("id")
     if not note_id:
         raise HTTPException(status_code=400, detail="id is required")
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         sets = ["updated_time = now()"]
         params = []
@@ -1244,7 +1256,7 @@ async def note_update(request: Request, authorization: str = None):
 @router.delete("/api/note/{note_id}")
 async def note_delete(note_id: str, authorization: str = None):
     """删除笔记（web note.ts deleteNote）"""
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         cur.execute("DELETE FROM trading_note WHERE id = %s RETURNING id", (note_id,))
         deleted = cur.fetchone()
@@ -1304,7 +1316,7 @@ async def route_is_exist(routeName: str = None, authorization: str = None):
 @router.get("/api/trading-system/tree")
 async def trading_system_tree(authorization: str = None):
     """交易系统节点树"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
             SELECT id, parent_id, name, description, sort_order, color,
@@ -1332,7 +1344,7 @@ async def trading_system_tree(authorization: str = None):
 @router.get("/api/trading-system/node/{node_id}")
 async def trading_system_node_get(node_id: str, authorization: str = None):
     """单个节点详情"""
-    conn = get_reader_conn()
+    conn = get_mind_reader_conn()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM trading_system_node WHERE id = %s", (node_id,))
         row = cur.fetchone()
@@ -1347,7 +1359,7 @@ async def trading_system_node_create(request: Request, authorization: str = None
     """创建节点"""
     body = await request.json()
     node_id = f"tsn_{datetime.now(TZ_CST).strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}"
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO trading_system_node (id, parent_id, name, description, sort_order, color)
@@ -1366,7 +1378,7 @@ async def trading_system_node_create(request: Request, authorization: str = None
 async def trading_system_node_update(node_id: str, request: Request, authorization: str = None):
     """更新节点"""
     body = await request.json()
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         sets = ["updated_time = now()"]
         params = []
@@ -1389,7 +1401,7 @@ async def trading_system_node_update(node_id: str, request: Request, authorizati
 @router.delete("/api/trading-system/node/{node_id}")
 async def trading_system_node_delete(node_id: str, authorization: str = None):
     """删除节点"""
-    conn = get_writer_conn()
+    conn = get_mind_writer_conn()
     with conn.cursor() as cur:
         cur.execute("DELETE FROM trading_system_node WHERE id = %s RETURNING id", (node_id,))
         deleted = cur.fetchone()

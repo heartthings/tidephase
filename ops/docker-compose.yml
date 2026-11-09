@@ -68,6 +68,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       MARKET_TSDB_HOST: market-tsdb
+      MIND_DB_HOST: mind-tsdb
+      MIND_DB_PORT: "5432"
       MARKET_TSDB_PORT: "5432"
       MARKET_TSDB_NAME: market_tsdb
       MARKET_TSDB_USER: duser_writer
@@ -93,6 +95,7 @@ services:
       start_period: 15s
     networks:
       - market-net
+      - mind-net
 
   # ─── Worker (采集工作器) ──────────────────────────────────────────
   market-worker:
@@ -104,6 +107,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       MARKET_TSDB_HOST: market-tsdb
+      MIND_DB_HOST: mind-tsdb
+      MIND_DB_PORT: "5432"
       MARKET_TSDB_PORT: "5432"
       MARKET_TSDB_NAME: market_tsdb
       MARKET_TSDB_USER: duser_writer
@@ -125,6 +130,7 @@ services:
       start_period: 10s
     networks:
       - market-net
+      - mind-net
 
   # ─── Data API (FastAPI, Z2 实装；本波占位) ────────────────────────
   market-api:
@@ -136,6 +142,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       MARKET_TSDB_HOST: market-tsdb
+      MIND_DB_HOST: mind-tsdb
+      MIND_DB_PORT: "5432"
       MARKET_TSDB_PORT: "5432"
       MARKET_TSDB_NAME: market_tsdb
       MARKET_TSDB_USER_READER: duser_reader
@@ -162,6 +170,7 @@ services:
       start_period: 10s
     networks:
       - market-net
+      - mind-net
 
   market-dsh:
     build:
@@ -210,3 +219,6 @@ volumes:
 networks:
   market-net:
     driver: bridge
+  mind-net:
+    external: true
+    name: mind-net

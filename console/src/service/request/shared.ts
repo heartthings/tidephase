@@ -1,4 +1,3 @@
-import { router } from '@/features/router';
 import { localStg } from '@/utils/storage';
 
 import { fetchRefreshToken } from '../api';
@@ -25,9 +24,6 @@ export async function handleRefreshToken() {
     localStg.set('refreshToken', data.refreshToken);
     return true;
   } catch {
-    const location = router.reactRouter.state.location;
-    const fullPath = location.pathname + location.search + location.hash;
-    router.push('/login-out', { query: { redirect: fullPath } });
     return false;
   }
 }

@@ -21,6 +21,7 @@ export const pages: Record<string, () => Promise<any>> = {
 "(base)_about": () => import("@/pages/(base)/about/index.tsx"),
 "(base)_capital-flow": () => import("@/pages/(base)/capital-flow/index.tsx"),
 "(base)_catalyst": () => import("@/pages/(base)/catalyst/index.tsx"),
+"(base)_floor": () => import("@/pages/(base)/floor/index.tsx"),
 "(base)_home": () => import("@/pages/(base)/home/index.tsx"),
 "(base)_interval-stats": () => import("@/pages/(base)/interval-stats/index.tsx"),
 "(base)_manage": () => import("@/pages/(base)/manage/index.tsx"),

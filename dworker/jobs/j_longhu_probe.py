@@ -5,7 +5,7 @@ from dworker.adapters.longhu import LonghuAdapter
 from dworker.core.degradation import JobContext, SourceError
 
 logger = logging.getLogger(__name__)
-ENDPOINTS = ("Emotion", "DailyLimitResumption", "Radar")
+ENDPOINTS = ("Emotion", "DailyLimitResumption")
 
 
 def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, trigger="scheduled"):

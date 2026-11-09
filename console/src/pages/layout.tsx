@@ -27,22 +27,24 @@ function isPublicAccessPath(pathname: string) {
 function guardGuestAccess(to: Router.Route) {
   if (isPublicAccessPath(to.pathname)) return null;
 
-  if (to.handle?.constant && to.id !== 'notFound') return null;
+  // 观势台不再要求登录。登录页直接回首页。
+  if (to.pathname === '/login' || to.pathname.startsWith('/login/')) {
+    return '/home';
+  }
 
-  return `/login?redirect=${to.fullPath}`;
+  return null;
 }
 
 // eslint-disable-next-line max-params
 function guardAuthedAccess(to: Router.Route, roles: string[], isSuper: boolean, previousRoute: Router.Route | null) {
-  const rootRoute: RoutePath = '/';
   const noAuthorizationRoute: RoutePath = '/403';
   const needLogin = !to.handle?.constant;
   const routeRoles = to.handle?.roles || [];
   const hasRole = roles.some(role => routeRoles.includes(role));
   const hasAuth = isSuper || !routeRoles.length || hasRole;
 
-  if (to.fullPath.includes('login') && to.pathname !== '/login-out') {
-    return rootRoute;
+  if (to.pathname === '/login' || to.pathname.startsWith('/login') || to.pathname === '/login-out') {
+    return '/home';
   }
 
   if (to.id === 'notFound') {

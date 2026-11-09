@@ -1,156 +1,63 @@
-import { AdminLayout, LAYOUT_SCROLL_EL_ID } from '@sa/materials';
-import type { LayoutMode } from '@sa/materials';
-import { configResponsive } from 'ahooks';
-import { Suspense } from 'react';
+import { NavLink, Outlet } from 'react-router-dom';
 
-import './index.scss';
-import {
-  LAYOUT_MODE_HORIZONTAL,
-  LAYOUT_MODE_HORIZONTAL_MIX,
-  LAYOUT_MODE_VERTICAL,
-  LAYOUT_MODE_VERTICAL_MIX
-} from '@/constants/common';
-import { useMixMenuContext } from '@/features/menu';
-import GlobalTab from '@/features/tab/GlobalTab';
-import { getThemeSettings, setLayoutMode } from '@/features/theme';
+import './console-shell.css';
 
-import { getFullContent, getMixSiderFixed, getSiderCollapse, setIsMobile, setSiderCollapse } from '../appStore';
-import GlobalContent from '../modules/GlobalContent';
-import GlobalFooter from '../modules/GlobalFooter';
-import GlobalSider from '../modules/GlobalSider';
-import GlobalHeader from '../modules/global-header/GlobalHeader';
-import GlobalMenu from '../modules/global-menu';
-import ThemeDrawer from '../modules/theme-drawer';
+const NAV: Array<{ label: string; to: string } | { section: string }> = [
+  { section: '盘面' },
+  { label: '观势台', to: '/home' },
+  { label: '涨跌停', to: '/floor' },
+  { label: '大盘直播', to: '/market-trends/radar' },
+  { label: '盘中快讯', to: '/market-trends/dynamic' },
+  { section: '研究' },
+  { label: '题材库', to: '/topic-lib' },
+  { label: '主力净额', to: '/capital-flow' },
+  { label: '区间统计', to: '/interval-stats' },
+  { label: '催化雷达', to: '/catalyst' },
+  { section: '记录' },
+  { label: '交易体系', to: '/trading-system' },
+  { label: '交易笔记', to: '/trading-notes' }
+];
 
-configResponsive({ sm: 640 });
+function isSection(item: { label: string; to: string } | { section: string }): item is { section: string } {
+  return 'section' in item;
+}
 
 const BaseLayout = () => {
-  const dispatch = useAppDispatch();
-
-  const themeSettings = useAppSelector(getThemeSettings);
-
-  const siderCollapse = useAppSelector(getSiderCollapse);
-
-  const fullContent = useAppSelector(getFullContent);
-
-  const responsive = useResponsive();
-
-  const mixSiderFixed = useAppSelector(getMixSiderFixed);
-
-  const { childLevelMenus, isActiveFirstLevelMenuHasChildren } = useMixMenuContext();
-
-  const siderVisible = themeSettings.layout.mode !== LAYOUT_MODE_HORIZONTAL;
-
-  const isVerticalMix = themeSettings.layout.mode === LAYOUT_MODE_VERTICAL_MIX;
-
-  const isHorizontalMix = themeSettings.layout.mode === LAYOUT_MODE_HORIZONTAL_MIX;
-
-  const layoutMode = themeSettings.layout.mode.includes(LAYOUT_MODE_VERTICAL)
-    ? LAYOUT_MODE_VERTICAL
-    : LAYOUT_MODE_HORIZONTAL;
-
-  const isMobile = !responsive.sm;
-
-  function getSiderWidth() {
-    const { reverseHorizontalMix } = themeSettings.layout;
-
-    const { mixChildMenuWidth, mixWidth, width } = themeSettings.sider;
-
-    if (isHorizontalMix && reverseHorizontalMix) {
-      return isActiveFirstLevelMenuHasChildren ? width : 0;
-    }
-
-    let w = isVerticalMix || isHorizontalMix ? mixWidth : width;
-
-    if (isVerticalMix && mixSiderFixed && childLevelMenus.length) {
-      w += mixChildMenuWidth;
-    }
-
-    return w;
-  }
-
-  const siderWidth = getSiderWidth();
-
-  function getSiderCollapsedWidth() {
-    const { reverseHorizontalMix } = themeSettings.layout;
-    const { collapsedWidth, mixChildMenuWidth, mixCollapsedWidth } = themeSettings.sider;
-
-    if (isHorizontalMix && reverseHorizontalMix) {
-      return isActiveFirstLevelMenuHasChildren ? collapsedWidth : 0;
-    }
-
-    let w = isVerticalMix || isHorizontalMix ? mixCollapsedWidth : collapsedWidth;
-
-    if (isVerticalMix && mixSiderFixed && childLevelMenus.length) {
-      w += mixChildMenuWidth;
-    }
-
-    return w;
-  }
-  const siderCollapsedWidth = getSiderCollapsedWidth();
-
-  function updateSiderCollapse() {
-    dispatch(setSiderCollapse(true));
-  }
-
-  useLayoutEffect(() => {
-    dispatch(setIsMobile(isMobile));
-    if (isMobile) {
-      dispatch(setLayoutMode('vertical'));
-    }
-  }, [isMobile, dispatch]);
-
   return (
-    <AdminLayout
-      fixedFooter={themeSettings.footer.fixed}
-      fixedTop={themeSettings.fixedHeaderAndTab}
-      Footer={<GlobalFooter />}
-      footerHeight={themeSettings.footer.height}
-      footerVisible={themeSettings.footer.visible}
-      fullContent={fullContent}
-      headerHeight={themeSettings.header.height}
-      isMobile={isMobile}
-      mode={layoutMode as LayoutMode}
-      rightFooter={themeSettings.footer.right}
-      scrollElId={LAYOUT_SCROLL_EL_ID}
-      scrollMode={themeSettings.layout.scrollMode}
-      siderCollapse={siderCollapse}
-      siderCollapsedWidth={siderCollapsedWidth}
-      siderVisible={siderVisible}
-      siderWidth={siderWidth}
-      Tab={<GlobalTab />}
-      tabHeight={themeSettings.tab.height}
-      tabVisible={themeSettings.tab.visible}
-      updateSiderCollapse={updateSiderCollapse}
-      Header={
-        <GlobalHeader
-          isMobile={isMobile}
-          mode={themeSettings.layout.mode}
-          reverse={themeSettings.layout.reverseHorizontalMix}
-          siderWidth={themeSettings.sider.width}
-        />
-      }
-      Sider={
-        <GlobalSider
-          headerHeight={themeSettings.header.height}
-          inverted={themeSettings.sider.inverted}
-          isHorizontalMix={isHorizontalMix}
-          isVerticalMix={isVerticalMix}
-          siderCollapse={siderCollapse}
-        />
-      }
-    >
-      <GlobalContent />
-
-      <GlobalMenu
-        mode={themeSettings.layout.mode}
-        reverse={themeSettings.layout.reverseHorizontalMix}
-      />
-
-      <Suspense fallback={null}>
-        <ThemeDrawer />
-      </Suspense>
-    </AdminLayout>
+    <div className="gs-shell">
+      <aside className="gs-side">
+        <div className="gs-brand">
+          <span className="gs-mark">观</span>
+          <span>
+            <strong>观势</strong>
+            <em>Tidephase</em>
+          </span>
+        </div>
+        <nav>
+          {NAV.map(item =>
+            isSection(item) ? (
+              <div
+                className="gs-section"
+                key={item.section}
+              >
+                {item.section}
+              </div>
+            ) : (
+              <NavLink
+                className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+                key={item.to}
+                to={item.to}
+              >
+                {item.label}
+              </NavLink>
+            )
+          )}
+        </nav>
+      </aside>
+      <main className="gs-main">
+        <Outlet />
+      </main>
+    </div>
   );
 };
 

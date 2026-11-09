@@ -1,223 +1,72 @@
-import { DatePicker, List } from 'antd';
+import { DatePicker, Input } from 'antd';
 import dayjs from 'dayjs';
+import { useMemo, useState } from 'react';
 
-import { themeColors } from '@/features/theme';
-import { useMobile } from '@/hooks/common/mobile';
-import { useMarketDynamics } from '@/service/hooks/useMarket';
+import { Panel } from '@/features/desk/Panel';
+import '@/features/desk/desk.css';
+import { useConsoleDesk } from '@/service/hooks/useDesk';
 
 const MarketDynamic = () => {
-  const isMobile = useMobile();
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [keyword, setKeyword] = useState('');
+  const { data, isLoading } = useConsoleDesk(date);
 
-  const { data, isLoading, refetch } = useMarketDynamics(date);
-  const colors = useAppSelector(themeColors);
-  const lastIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (data && data.length > 0) {
-      lastIdRef.current = data[0].id;
-    }
-  }, [data]);
-
-  useEffect(() => {
-    // 页面加载时请求权限
-    if (window.Notification && Notification.permission !== 'granted') {
-      Notification.requestPermission();
-    }
-
-    const interval = setInterval(
-      () => {
-        const now = dayjs();
-        const start = now.set('hour', 9).set('minute', 15).set('second', 0);
-        const end = now.set('hour', 15).set('minute', 0).set('second', 0);
-
-        if (now.isAfter(start) && now.isBefore(end)) {
-          refetch().then(({ data: newData }) => {
-            if (newData && newData.length > 0) {
-              const latestItem = newData[0];
-              if (latestItem.id !== lastIdRef.current) {
-                // eslint-disable-next-line no-new
-                new Notification('盘中动态有新消息', {
-                  body: latestItem.comment,
-                  tag: latestItem.id // 使用ID作为tag，防止重复通知
-                });
-                lastIdRef.current = latestItem.id;
-              }
-            }
-          });
-        }
-      },
-      2 * 60 * 1000
-    ); // 2分钟
-
-    return () => clearInterval(interval);
-  }, [refetch]);
-
-  const list = (data || []).filter(item => {
-    const text = `${item.comment} ${item.stock}`.toLowerCase();
-    return text.includes(keyword.toLowerCase());
-  });
-
-  function formatTime(ts: string) {
-    const num = Number(ts);
-    const ms = ts.length === 13 ? num : num * 1000;
-    return dayjs(ms).format('YYYY-MM-DD HH:mm:ss');
-  }
-
-  function highlightNumbers(text: string) {
-    const parts = text.split(/(\d+(?:\.\d+)?%?)/g);
-    return (
-      <ATypography.Paragraph ellipsis={{ expandable: true, rows: 3 }}>
-        {parts.map((p, i) =>
-          /^(\d+(?:\.\d+)?%?)$/.test(p) ? (
-            <ATypography.Text
-              key={i}
-              style={{ color: colors.primary }}
-            >
-              {p}
-            </ATypography.Text>
-          ) : (
-            <span key={i}>{p}</span>
-          )
-        )}
-      </ATypography.Paragraph>
-    );
-  }
-
-  function formatStocks(jsonStr: string) {
-    let arr: any[] = [];
-    try {
-      arr = JSON.parse(jsonStr) || [];
-    } catch {
-      arr = [];
-    }
-    return (
-      <ASpace
-        className="w-full"
-        direction="vertical"
-        size={6}
-      >
-        {arr.map((it: [string, string, number]) => {
-          const [code, name, pctRaw] = it;
-          const pct = Number(pctRaw);
-          const isUp = pct >= 0;
-          const display = `${isUp ? '+' : ''}${pct.toFixed(2)}%`;
-          return (
-            <div
-              className="w-full flex-y-center justify-between"
-              key={`${code}-${name}`}
-            >
-              <ASpace size={8}>
-                <ATypography.Text code>{code}</ATypography.Text>
-                <ATypography.Text strong>{name}</ATypography.Text>
-              </ASpace>
-              <ATag
-                className="min-w-72px px-8px text-center font-semibold"
-                color={isUp ? 'error' : 'success'}
-              >
-                {display}
-              </ATag>
-            </div>
-          );
-        })}
-      </ASpace>
-    );
-  }
+  const list = useMemo(() => {
+    const rows = data?.messages || [];
+    const q = keyword.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(item => `${item.title} ${item.content}`.toLowerCase().includes(q));
+  }, [data, keyword]);
 
   return (
-    <ACard
-      title="盘中动态"
-      extra={
-        <ASpace
-          align={isMobile ? 'end' : 'center'}
-          direction={isMobile ? 'vertical' : 'horizontal'}
-        >
+    <div className="gs-desk space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="m-0 text-24px">盘中快讯</h1>
+          <p className="m-0 mt-1 text-13px text-[var(--gs-muted)]">财联社电报进入 market_messages 的条目。</p>
+        </div>
+        <div className="flex gap-2">
           <DatePicker
+            allowClear={false}
             value={dayjs(date)}
             onChange={d => setDate(d?.format('YYYY-MM-DD') || dayjs().format('YYYY-MM-DD'))}
           />
-          <AInput
+          <Input
             allowClear
-            placeholder="搜索关键词"
+            placeholder="搜索快讯"
+            style={{ width: 220 }}
             value={keyword}
             onChange={e => setKeyword(e.target.value)}
           />
-        </ASpace>
-      }
-    >
-      {isMobile ? (
-        <List
-          dataSource={list}
-          loading={isLoading}
-          renderItem={item => (
-            <List.Item>
-              <ACard
-                size="small"
-                style={{ width: '100%' }}
-              >
-                <div className="mb-2 text-xs text-gray-400">{formatTime(item.time)}</div>
-                <div className="mb-2">{highlightNumbers(item.comment)}</div>
-                {item.stock && item.stock !== '[]' && (
-                  <div className="rounded bg-gray-50 p-2">{formatStocks(item.stock)}</div>
-                )}
-              </ACard>
-            </List.Item>
-          )}
-        />
-      ) : (
-        <ATable
-          dataSource={list}
-          loading={isLoading}
-          pagination={false}
-          rowKey="id"
-          size="small"
-          tableLayout="fixed"
-          columns={[
-            {
-              align: 'center',
-              dataIndex: 'time',
-              key: 'time',
-              render: (v: string) => formatTime(v),
-              title: '事件时间',
-              width: 160
-            },
-            {
-              dataIndex: 'comment',
-              key: 'comment',
-              render: (v: string) => highlightNumbers(v),
-              title: '事件内容'
-            },
-            {
-              dataIndex: 'stock',
-              key: 'stock',
-              render: (v: string) => formatStocks(v),
-              title: '相关个股',
-              width: 260
-            }
-          ]}
-          onRow={(_, index) => ({
-            style: Number(index ?? 0) % 2 === 1 ? { backgroundColor: toRGBA(colors.primary, 0.06) } : undefined
-          })}
-        />
-      )}
-    </ACard>
+        </div>
+      </div>
+
+      <Panel
+        hint={isLoading ? '加载中' : `${list.length} 条`}
+        title={date}
+      >
+        {list.length === 0 ? (
+          <div className="gs-empty">这一天还没有快讯</div>
+        ) : (
+          list.map(item => (
+            <div
+              className="gs-live-item"
+              key={item.id}
+            >
+              <div className="gs-live-meta">
+                <span>{item.time}</span>
+                <span>{item.source}</span>
+              </div>
+              <div className="font-600 text-13px">{item.title || item.content}</div>
+              {item.title && item.content && item.title !== item.content ? (
+                <div className="mt-1 text-13px text-[var(--gs-muted)]">{item.content}</div>
+              ) : null}
+            </div>
+          ))
+        )}
+      </Panel>
+    </div>
   );
 };
-
-function toRGBA(hex: string, alpha = 1) {
-  const clean = hex.replace('#', '');
-  const full =
-    clean.length === 3
-      ? clean
-          .split('')
-          .map(c => c + c)
-          .join('')
-      : clean;
-  const r = Number.parseInt(full.substring(0, 2), 16);
-  const g = Number.parseInt(full.substring(2, 4), 16);
-  const b = Number.parseInt(full.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export default MarketDynamic;

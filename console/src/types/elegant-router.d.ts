@@ -32,6 +32,7 @@ declare module "@soybean-react/vite-plugin-react-router" {
     "(base)_about": "/about";
     "(base)_capital-flow": "/capital-flow";
     "(base)_catalyst": "/catalyst";
+    "(base)_floor": "/floor";
     "(base)_home": "/home";
     "(base)_interval-stats": "/interval-stats";
     "(base)_manage": "/manage";
@@ -133,6 +134,7 @@ declare module "@soybean-react/vite-plugin-react-router" {
     | "(base)_about"
     | "(base)_capital-flow"
     | "(base)_catalyst"
+    | "(base)_floor"
     | "(base)_home"
     | "(base)_interval-stats"
     | "(base)"

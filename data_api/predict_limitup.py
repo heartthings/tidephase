@@ -14,8 +14,9 @@ L2 逻辑回归分别估计
   - 标签与特征均按相邻交易日计算；停牌/无量的 T+1 不计入
   - 题材用开盘啦 stock_sector_map（801 开头），按当天有效区间取值，不用之后才出现的归属。
     父子板块来自开盘啦 SonPlate：股票落在子板块上写成「父 / 分支」
-  - 可能的一板只留技术形态：缩量后连续放量上影、急跌后放量上影、连板后跌出空间。
-    不按消息、不按板块一起放量来取舍。名单按板块计数。二板和风向个股不再输出。
+  - 可能的一板仍用三条候选形态：缩量后连续放量上影、急跌后放量上影、连板后跌出空间。
+    这是筛法，不是已经涨停的票的共性图形（F-036）。不按消息、不按板块一起放量来取舍。
+    名单按板块计数。二板和风向个股不再输出。
 
 不依赖 sklearn：numpy 手写 Adam + 标准化，概率由逻辑回归直接给出。
 
@@ -1121,9 +1122,12 @@ def _fulfillment_tape(conn, code: str, theme: str, check_date: str, result: str)
 
 
 def _live_track(conn, days: int = 20) -> dict:
-    """读 prediction/reflection 里首板二板的近期兑现，供简报引用。"""
+    """读心库 prediction/reflection 里首板二板的近期兑现，供简报引用。"""
+    from data_api.mind_db import get_mind_reader_conn
     try:
-        with conn.cursor() as cur:
+        mconn = get_mind_reader_conn()
+        try:
+            cur = mconn.cursor()
             cur.execute(
                 """
                 SELECT category,
@@ -1160,6 +1164,8 @@ def _live_track(conn, days: int = 20) -> dict:
                 (days,),
             )
             rows = cur.fetchall()
+        finally:
+            mconn.close()
         recent = []
         taped = 0
         for r in rows:
@@ -1540,7 +1546,7 @@ def render_markdown(r: dict) -> str:
 
     for key, title, note in (
         ("first_board", "可能的一板（今日未涨停，且符合技术形态）",
-         "只看技术形态：缩量后连续放量上影、急跌后放量上影、连板后连续下跌跌出空间。不看消息，也不看板块有没有一起动。下面每个板块标题上的数字是这一形态里有几只。"),
+         "收盘后的候选筛法：缩量后连续放量上影、急跌后放量上影、连板后连续下跌跌出空间。这不是已经涨停的票常见的图形。不看消息，也不看板块有没有一起动。下面每个板块标题上的数字是这一形态里有几只。"),
     ):
         lines.append(f"\n### {title}\n")
         lines.append(f"_{note}_\n")

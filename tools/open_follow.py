@@ -3,6 +3,7 @@
 
 每分钟看一次报价。跟随必须连续两分钟还在同一档之上，单次脉冲不记。
 文字至少隔五分钟，只列还能跟的票；涨停只留一行参考。名单没变就不发。10:00 停。
+每一条文字同时发一张图，图上的板块和个股跟文字是同一份。
 
 只留同时满足两件事的板块：至少两只在涨，并且对上了隔夜消息或同花顺今天炒什么。
 """
@@ -24,6 +25,8 @@ from open_first_auction import (
     send,
     trade_open,
     connect,
+    send_image,
+    _machine_path,
     _pct,
     _sector_codes,
 )
@@ -190,6 +193,105 @@ def render(day: str, when: datetime, book: dict) -> str:
     return "\n".join(lines)
 
 
+def render_image(day: str, when: datetime, book: dict, out_dir: Path | None = None) -> Path:
+    """和同一条文字展开的名单一致。"""
+    from PIL import Image, ImageDraw, ImageFont
+
+    font = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    font_b = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+    title_f = ImageFont.truetype(font_b, 40)
+    note_f = ImageFont.truetype(font, 22)
+    head_f = ImageFont.truetype(font_b, 26)
+    name_f = ImageFont.truetype(font_b, 30)
+    code_f = ImageFont.truetype(font_b, 28)
+    extra_f = ImageFont.truetype(font, 24)
+    foot_f = ImageFont.truetype(font, 20)
+    w, pad = 1080, 36
+    bg, ink, muted = (246, 243, 236), (28, 32, 28), (90, 96, 88)
+    line, card, head, pill = (220, 214, 202), (255, 252, 246), (24, 48, 36), (24, 48, 36)
+    clock = when.strftime("%H:%M")
+    groups = [g for g in sections(book) if g["following"]][:SHOW_SECTORS]
+    note = f"{day} {clock}  这一轮只列还能跟的票。涨停只作参考。跟随要连续两分钟还在。"
+
+    def wrap(text, fnt, width):
+        lines, cur = [], ""
+        for ch in text:
+            trial = cur + ch
+            if fnt.getlength(trial) <= width:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = ch
+        if cur:
+            lines.append(cur)
+        return lines or [""]
+
+    note_lines = wrap(note, note_f, w - pad * 2)
+    body_h = 112 + len(note_lines) * 34 + 24
+    cards = []
+    for group in groups:
+        visible = group["following"][:SHOW_FOLLOW]
+        extra = len(group["following"]) - len(visible)
+        foot_n = (1 if extra > 0 else 0) + (1 if group["sealed"] else 0)
+        card_h = 58 + len(visible) * 72 + foot_n * 36 + 16
+        cards.append((group, visible, extra, card_h))
+        body_h += card_h + 18
+    if not cards:
+        body_h += 72
+    left = len([g for g in sections(book) if g["following"]]) - len(groups)
+    if left > 0:
+        body_h += 40
+    body_h += 70
+    img = Image.new("RGB", (w, body_h), bg)
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, 0, w, 92), fill=head)
+    d.text((pad, 24), "开盘联动", font=title_f, fill=(255, 250, 240))
+    y = 112
+    for ln in note_lines:
+        d.text((pad, y), ln, font=note_f, fill=muted)
+        y += 34
+    y += 16
+    if not cards:
+        d.text((pad, y), "这一轮没有可跟的方向。", font=name_f, fill=ink)
+        y += 56
+    for group, visible, extra, card_h in cards:
+        d.rounded_rectangle((pad - 8, y, w - pad + 8, y + card_h), radius=12, fill=card)
+        d.text((pad + 8, y + 12), f"{group['leaf']}  跟随 {len(group['following'])}", font=head_f, fill=head)
+        y += 58
+        for row in visible:
+            d.line((pad + 8, y, w - pad - 8, y), fill=line, width=1)
+            y += 16
+            d.text((pad + 8, y), str(row["name"]), font=name_f, fill=ink)
+            code = _code(row["code"])
+            pill_w = int(code_f.getlength(code)) + 28
+            d.rounded_rectangle((430, y - 4, 430 + pill_w, y + 40), radius=8, fill=pill)
+            d.text((444, y), code, font=code_f, fill=(255, 250, 240))
+            pct = f"{row['pct']:+.1f}%"
+            d.text((w - pad - int(extra_f.getlength(pct)) - 8, y + 2), pct, font=extra_f, fill=muted)
+            y += 56
+        if extra > 0:
+            d.text((pad + 8, y), f"还有 {extra} 只跟随", font=note_f, fill=muted)
+            y += 36
+        if group["sealed"]:
+            names = [str(r["name"]) for r in group["sealed"][:3]]
+            ref = "、".join(names)
+            if len(group["sealed"]) > len(names):
+                ref += f" 等{len(group['sealed'])}只"
+            d.text((pad + 8, y), f"参考涨停  {ref}", font=note_f, fill=muted)
+            y += 36
+        y += 18
+    if left > 0:
+        d.text((pad, y), f"还有 {left} 个方向有跟随，这次不展开。", font=note_f, fill=muted)
+        y += 36
+    d.text((pad, y + 8), f"{day} {clock}", font=foot_f, fill=muted)
+    dest = out_dir or _machine_path("brief_dir") or (ROOT / "data" / "briefs")
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / f"open_follow_{day.replace('-', '')}_{clock.replace(':', '')}.png"
+    img.save(path, "PNG")
+    return path
+
+
 def _state_path(day: str) -> Path:
     return STATE_DIR / f"open_follow_{day}.json"
 
@@ -302,11 +404,14 @@ def run(dry_run: bool = False) -> None:
 def _deliver(day: str, when: datetime, book: dict, dry_run: bool = False) -> None:
     text = render(day, when, book)
     title = f"观势 · 开盘联动 {day} {when.strftime('%H:%M')}"
+    image = render_image(day, when, book)
     if dry_run:
         print(title)
         print(text)
+        print(image)
         return
     send(title, text)
+    send_image(title, image)
 
 
 def push_once(dry_run: bool = False) -> None:
@@ -355,6 +460,9 @@ def selfcheck() -> None:
     assert "乙" in text and "600002" in text and "+4.0%" in text
     assert "参考涨停  甲" in text
     assert "+10.0%" not in text
+    image = render_image("2026-11-05", datetime(2026, 11, 5, 9, 40), second, out_dir=STATE_DIR / "selfcheck")
+    assert image.is_file() and image.stat().st_size > 1000
+    image.unlink()
     end = datetime(2026, 11, 5, 10, 0)
     assert should_send(True, datetime(2026, 11, 5, 9, 32), datetime(2026, 11, 5, 9, 36), end) is False
     assert should_send(True, datetime(2026, 11, 5, 9, 31), datetime(2026, 11, 5, 9, 36), end)

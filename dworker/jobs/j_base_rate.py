@@ -20,12 +20,14 @@ j_base_rate - 基率聚合作业
 import json
 import logging
 import math
+import os
 import time
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 
 import psycopg2
 import psycopg2.extras
+import yaml
 
 logger = logging.getLogger(__name__)
 TZ_CST = timezone(timedelta(hours=8))
@@ -56,6 +58,19 @@ def _reliability(n_samples: int) -> str:
         return "medium"
     else:
         return "high"
+
+
+def _mind_conn():
+    """prediction 和 base_rate 在心库。容器里经 mind-net 连 mind-tsdb:5432。"""
+    secrets = Path(__file__).resolve().parents[2] / "configs" / "secrets.yaml"
+    cfg = (yaml.safe_load(secrets.read_text()) or {}).get("mind", {})
+    return psycopg2.connect(
+        host=os.getenv("MIND_DB_HOST", cfg.get("host", "127.0.0.1")),
+        port=int(os.getenv("MIND_DB_PORT", cfg.get("port", 15433))),
+        dbname=cfg.get("name", "mind"),
+        user="mind_writer",
+        password=cfg.get("writer_password", ""),
+    )
 
 
 def _get_window_end(conn) -> date:
@@ -118,6 +133,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
 
     # ─── 1. 确定窗口 ──────────────────────────────────────────
     window_end = _get_window_end(conn)
+    conn = _mind_conn()
     window_start_rolling = _get_window_start_rolling(window_end)
     window_start_full = _get_window_start_full(conn, fallback=window_end)
 
@@ -219,6 +235,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
     except Exception as e:
         logger.error(f"[j_base_rate] Aggregation failed: {e}")
         conn.rollback()
+        conn.close()
         elapsed = time.time() - t0
         return {
             "success": False,
@@ -229,6 +246,7 @@ def run(job_ctx, deg_chain, source_chain, conn, ingest_logger, raw_archiver, tri
             "note": f"FAIL: {e} elapsed={elapsed:.1f}s",
         }
 
+    conn.close()
     elapsed = time.time() - t0
     note = f"groups={len(groups)} written={rows_written} window_end={window_end} elapsed={elapsed:.1f}s"
     logger.info(f"[j_base_rate] {note}")

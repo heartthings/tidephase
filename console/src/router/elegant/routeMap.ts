@@ -31,6 +31,7 @@ export const routeMap: RouteMap = {
  "(base)_about": "/about",
  "(base)_capital-flow": "/capital-flow",
  "(base)_catalyst": "/catalyst",
+ "(base)_floor": "/floor",
  "(base)_home": "/home",
  "(base)_interval-stats": "/interval-stats",
  "(base)_manage": "/manage",

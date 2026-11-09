@@ -43,6 +43,14 @@ def _conn(role="reader"):
     )
 
 
+def _mind_conn(role="reader"):
+    sec = _secrets()["mind"]
+    return psycopg2.connect(
+        host=sec.get("host", "127.0.0.1"), port=int(sec.get("port", 15433)), dbname=sec.get("name", "mind"),
+        user=f"mind_{role}", password=sec[f"{role}_password"],
+    )
+
+
 def _token(kind="read"):
     sec = _secrets()["api"]
     return sec["bearer_token_write" if kind == "write" else "bearer_token_read"]
@@ -126,8 +134,13 @@ def persist(result: dict | None = None, as_of: str | None = None) -> dict:
 
 
 def verify(check_date: str | None = None) -> dict:
-    conn = _conn("d12")
     day = check_date or date.today().isoformat()
+    market = _conn("reader")
+    with market.cursor() as mcur:
+        mcur.execute("SELECT code FROM zt_pool WHERE date = %s", (day,))
+        zt = {r[0] for r in mcur.fetchall()}
+    market.close()
+    conn = _mind_conn("writer")
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -140,8 +153,6 @@ def verify(check_date: str | None = None) -> dict:
             (day,),
         )
         rows = cur.fetchall()
-        cur.execute("SELECT code FROM zt_pool WHERE date = %s", (day,))
-        zt = {r[0] for r in cur.fetchall()}
         hits, misses = [], []
         for pid, falsify, conf, statement in rows:
             fz = falsify if isinstance(falsify, dict) else json.loads(falsify or "{}")
@@ -192,7 +203,7 @@ def reflect(verify_result: dict) -> dict:
                 f"{when} {m.get('name')}({m.get('code')}) 预测{m.get('kind')}未涨停，"
                 f"概率 {m.get('prob')}%，题材 {m.get('theme')}。"
                 f"原由：{'；'.join(m.get('reasons') or []) or '无'}。"
-                f"下次同形态同题材要核对：开盘是否已经兑现、题材阶段是否已转分歧、是否缩量。"
+                f"下次同形态同题材要核对：开盘是否已经兑现、题材阶段是否已转分歧。封板前缩不缩量，分不开会不会涨停。"
             )
         records.append({
             "decision_id": m["prediction_id"],
@@ -239,7 +250,7 @@ def reflect(verify_result: dict) -> dict:
 
 
 def summary(days: int = 20) -> dict:
-    conn = _conn("reader")
+    conn = _mind_conn("reader")
     with conn.cursor() as cur:
         cur.execute(
             """

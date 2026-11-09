@@ -35,10 +35,6 @@ const UserAvatar = memo(() => {
     }
   }
 
-  function loginOrRegister() {
-    navigate('/login');
-  }
-
   const items: MenuProps['items'] = [
     {
       key: '0',
@@ -69,7 +65,9 @@ const UserAvatar = memo(() => {
     }
   ];
 
-  return token ? (
+  if (!token) return null;
+
+  return (
     <ADropdown
       menu={{ items, onClick }}
       placement="bottomRight"
@@ -85,8 +83,6 @@ const UserAvatar = memo(() => {
         </ButtonIcon>
       </div>
     </ADropdown>
-  ) : (
-    <AButton onClick={loginOrRegister}>{t('page.login.common.loginOrRegister')}</AButton>
   );
 });
 

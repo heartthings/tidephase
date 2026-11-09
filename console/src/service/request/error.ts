@@ -25,10 +25,7 @@ function redirectByStatus(status: number, reqUrl: string) {
 
   // Public catalyst page must not be kicked to login by any 401.
   if (status === 401 && !isAuthFlow && !isPublicPage) {
-    const location = router.reactRouter.state.location;
-    const fullPath = location.pathname + location.search + location.hash;
-    router.push('/login-out', { query: { redirect: fullPath } });
-    return true;
+    return false;
   }
 
   if (status === 401 && isPublicPage) {
@@ -63,9 +60,7 @@ export async function backEndFail(
   const responseCode = String(response.data.code);
 
   function handleLogout() {
-    const location = router.reactRouter.state.location;
-    const fullPath = location.pathname + location.search + location.hash;
-    router.push('/login-out', { query: { redirect: fullPath } });
+    return;
   }
 
   function logoutAndCleanup() {

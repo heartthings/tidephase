@@ -29,6 +29,7 @@ from data_api.board_logic import (
     yuan_to_yi,
 )
 from data_api.lovetrade_routes import get_reader_conn
+from data_api.mind_db import get_mind_reader_conn
 
 logger = logging.getLogger("data-api.boards")
 TZ = timezone(timedelta(hours=8))
@@ -58,8 +59,8 @@ def _ok(data, gaps=None, **extra):
     return body
 
 
-def _query(sql: str, params=None):
-    conn = get_reader_conn()
+def _query(sql: str, params=None, mind: bool = False):
+    conn = get_mind_reader_conn() if mind else get_reader_conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params or [])
@@ -273,6 +274,7 @@ def intraday_radar(date_str: str | None = Query(default=None, alias="date"), lim
         SELECT ts, event_id, event_type, title, content, extra
         FROM radar_event
         WHERE ts::date = %s
+          AND source = 'kaipanla_zhibo'
         ORDER BY ts DESC
         LIMIT %s
         """,
@@ -287,7 +289,7 @@ def intraday_radar(date_str: str | None = Query(default=None, alias="date"), lim
             "stockName": extra.get("stock_name") or row["title"] or "",
             "lbStatus": extra.get("lb_status") or row["event_type"] or "",
             "status": extra.get("status") or "",
-            "content": clip_line(row["content"] or row["title"], 72),
+            "content": clip_line(row["content"] or row["title"], 800),
         })
     gaps = [] if events else ["这一天还没有雷达事件"]
     return _ok({"date": day.isoformat(), "events": events}, gaps=gaps)
@@ -327,9 +329,9 @@ INDEX_NAMES = {
 }
 
 
-def _try(sql: str, params=None):
+def _try(sql: str, params=None, mind: bool = False):
     try:
-        return _query(sql, params)
+        return _query(sql, params, mind)
     except Exception as exc:
         logger.info("board query skipped: %s", exc.__class__.__name__)
         return None
@@ -599,14 +601,15 @@ def intraday_tape(date_str: str | None = Query(default=None, alias="date")):
             "summary": row["summary"] or "",
         } for row in catalyst_rows]
 
-    result_rows = _try("SELECT result, count(*)::int AS n FROM prediction GROUP BY result ORDER BY n DESC")
+    result_rows = _try("SELECT result, count(*)::int AS n FROM prediction GROUP BY result ORDER BY n DESC", mind=True)
     recent_rows = _try(
         """
         SELECT category, result, left(statement, 48) AS statement
         FROM prediction
         ORDER BY created_at DESC
         LIMIT 6
-        """
+        """,
+        mind=True,
     )
     if result_rows is not None or recent_rows is not None:
         data["predictions"] = {
@@ -951,7 +954,8 @@ def _fulfillment() -> dict:
               AND p.check_date >= CURRENT_DATE - 20
             ORDER BY p.check_date DESC, p.confidence_pct DESC
             LIMIT 20
-            """
+            """,
+            mind=True,
         )
     except Exception:
         return {"shown": [], "quietMisses": 0}
