@@ -217,7 +217,8 @@ def build_card(row: dict) -> dict:
         lines.append("相关：" + "、".join(str(s) for s in stocks[:6]))
 
     body = "\n".join(lines).strip()
-    header_title = "大盘直播" if is_live else f"市场雷达 · {event_type}"
+    # 标题会出现在飞书消息列表里。用看不出内容的短词，避免投屏时暴露。
+    header_title = "同步"
     return {
         "msg_type": "interactive",
         "card": {
@@ -226,7 +227,7 @@ def build_card(row: dict) -> dict:
                     "tag": "plain_text",
                     "content": header_title,
                 },
-                "template": color,
+                "template": "grey",
             },
             "elements": [
                 {
