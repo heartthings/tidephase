@@ -1,0 +1,612 @@
+{
+  "unit": {
+    "name": "schedule",
+    "version": 2
+  },
+  "global": null,
+  "tables": {
+    "tasks": {
+      "schedule-de953e60-e84a-4500-8273-351e71f3f26d": {
+        "record": {
+          "id": "schedule-de953e60-e84a-4500-8273-351e71f3f26d",
+          "kind": "weekly",
+          "title": "观势 · 每个交易日 17:00 收盘简报、次日候选与涨停原因",
+          "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。同一轮接着做个股涨停原因，不要留到 17:30。读取 theme-emotion-daily 技能「个股涨停原因（17:00 收盘同一轮）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都写。证据包里 stocks 是涨停，limit_downs 是跌停。合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。写完后紧接着用 feishu-push 再发一条：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。",
+          "time": "17:00:00.000",
+          "timeZone": "Asia/Shanghai",
+          "weekdays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "scheduledAt": "2026-11-13T09:00:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        ],
+        "status": "active",
+        "updatedAt": "2026-11-12T09:00:00.084Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-12T09:00:00.000Z",
+          "deliveredAt": "2026-11-12T09:00:00.084Z",
+          "messageId": "f28fdada-6bed-4bcf-958a-768bd2baa725",
+          "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-10-26T09:00:00.000Z",
+              "deliveredAt": "2026-10-26T09:00:01.711Z",
+              "messageId": "fe8e5038-bd84-424e-a95f-aa025e057fa2",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组，写清逻辑链、后续要看个股、对上的消息。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。\n4. 简报必须有「### 明日风险与观察」，第一条写「**预期你的预期（给你的提醒）**」，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 推送成功后在本会话回报「已推送 + 标题 + 首板/二板候选数量」；失败就说明原因，不要假装成功。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-27T09:00:00.000Z",
+              "deliveredAt": "2026-10-27T09:00:00.116Z",
+              "messageId": "d5798f10-0e36-4d35-ada7-a51205ed7ec1",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组，写清逻辑链、后续要看个股、对上的消息。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。\n4. 简报必须有「### 明日风险与观察」，第一条写「**预期你的预期（给你的提醒）**」，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成三张图，推到同一个飞书群，顺序是风向个股、可能的一板、可能的二板。不要自己画图，不要改名单，不要把三张合成一张。脚本失败就说明原因，不要假装图已发出。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-28T09:00:00.000Z",
+              "deliveredAt": "2026-10-28T09:00:00.137Z",
+              "messageId": "99b7e3d9-608f-4d4a-b530-19b45dfc45b9",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组，写清逻辑链、后续要看个股、对上的消息。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股，第二张是可能的一板和二板合成的一张。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-29T09:00:00.000Z",
+              "deliveredAt": "2026-10-29T09:00:00.134Z",
+              "messageId": "6fd66cae-693f-4527-8ac6-4ae665de0eb4",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组，写清逻辑链、后续要看个股、对上的消息。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股，第二张是可能的一板和二板合成的一张。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-30T09:00:00.000Z",
+              "deliveredAt": "2026-10-30T09:00:00.117Z",
+              "messageId": "1ea325e2-b5cc-4052-8956-f3f5ee021d75",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-02T09:00:00.000Z",
+              "deliveredAt": "2026-11-02T09:00:00.126Z",
+              "messageId": "52eb85f8-edc8-40cb-bd31-607b9ce038b1",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-03T09:00:00.000Z",
+              "deliveredAt": "2026-11-03T09:00:00.222Z",
+              "messageId": "8bb00931-afca-4d32-a77e-32a2eb91dc37",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-04T09:00:00.000Z",
+              "deliveredAt": "2026-11-04T09:00:00.125Z",
+              "messageId": "2e3f84c5-c9bd-4715-bfd3-0a231b49f4a7",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-05T09:00:00.000Z",
+              "deliveredAt": "2026-11-05T09:00:00.128Z",
+              "messageId": "be7a86d7-6590-48a5-870d-1dcf2eb67cf0",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-06T09:00:00.000Z",
+              "deliveredAt": "2026-11-06T09:00:00.112Z",
+              "messageId": "41a7cf60-6f27-48b6-ba8d-c9d7b641af58",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-09T09:00:00.000Z",
+              "deliveredAt": "2026-11-09T09:00:00.078Z",
+              "messageId": "3f3ca235-9821-460a-9ecb-77a75ec9e598",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-10T09:00:00.000Z",
+              "deliveredAt": "2026-11-10T09:00:00.071Z",
+              "messageId": "f57e56f5-2fab-49fe-928b-49bf782f3645",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。个股涨停原因不在这一步。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-11T09:00:00.000Z",
+              "deliveredAt": "2026-11-11T09:00:00.813Z",
+              "messageId": "6b5db816-8184-45d8-aece-3905cd454cd5",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。同一轮接着做个股涨停原因，不要留到 17:30。读取 theme-emotion-daily 技能「个股涨停原因（17:00 收盘同一轮）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都写。证据包里 stocks 是涨停，limit_downs 是跌停。合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。写完后紧接着用 feishu-push 再发一条：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-12T09:00:00.000Z",
+              "deliveredAt": "2026-11-12T09:00:00.084Z",
+              "messageId": "f28fdada-6bed-4bcf-958a-768bd2baa725",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:00 的观势收盘推送。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能，按它的口径完成当日收盘题材情绪简报：开始聚集 / 已经高涨 / 已经没有情绪三组。每条题材按 F-029、F-030 动态判断是市场合力还是主力，不按流通市值切。同一件事上一批票同一时段一起封，写成合力；单票自己的日K路径，写成主力。主力要写到日K筹码在哪一步、分时封板之后价格是钉住还是被砸开。要看的个股只写它卡在哪一步。对上的消息没有就写没有。三组之后、次日候选之前，只写一段「### 明日预演与应对」：路径和动作同一行，第一条是「预期你的预期」。不要再单列「明日预演」「明日应对」或「明日风险与观察」。不写点位，不写买卖价。\n3. 调 GET http://127.0.0.1:8787/data/predict_limitup?format=markdown 取次日首板/二板候选；token 读 /home/hello/.qwenpaw/workspaces/guanshi/data/data_api_read_token。接口失败就把 gaps 写进缺口段，禁止本地重训、禁止直连数据库造候选。接口里的「近期预测兑现」按原文嵌进简报：带了走势的几只，保留题材涨停家数是在增加还是接不住、近几日 K 线、兑现日分时，不要收成「未涨停」。概率低于 10% 的未中只留一行。\n4. 「预期你的预期（给你的提醒）」写在「明日预演与应对」第一条，按当日状态选一致看多 / 一致恐慌 / 中性一档，带当日实际数字，不超过 3 行。\n5. 用 feishu-push 技能把整份简报一次推送到飞书：--sender yan --title \"观势 · 收盘题材情绪与次日首板/二板\" --priority normal；不要拆成多条，不要另发摘要。\n6. 文字推送成功后立刻运行 python3 /home/hello/application/green/tidephase/tools/send_watchlist_images.py。它按同一份预测结果生成两张图，推到同一个飞书群：第一张风向个股（开始聚焦、当天涨停至少 2 只的题材也留），第二张可能的一板，第三张可能的二板。不要合成到一张。一板是提前埋伏，二板是接力，都照接口留，不要改名单。不要自己画图，不要改名单，不要再拆成三张。脚本失败就说明原因，不要假装图已发出。\n8. 图发完后运行 python3 /home/hello/application/green/tidephase/tools/limitup_verify_loop.py cycle：先核对此前待验的首板/二板有没有涨停并写入反思，再把今天的候选落进 prediction。失败只说明原因。\n7. 回报「已推送 + 标题 + 首板/二板候选数量 + 三张图是否发出」；文字或图片失败都说明原因，不要假装成功。同一轮接着做个股涨停原因，不要留到 17:30。读取 theme-emotion-daily 技能「个股涨停原因（17:00 收盘同一轮）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都写。证据包里 stocks 是涨停，limit_downs 是跌停。合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。写完后紧接着用 feishu-push 再发一条：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n取数用 theme-emotion-daily/scripts/market_query.py 执行技能里的 SQL；预测只走 data-api。不要追加胜率承诺、目标价、买卖点或荐股。"
+            }
+          ],
+          "earlierRecordsUnavailable": false,
+          "earlierRecordsPruned": false
+        }
+      },
+      "schedule-fbe97d26-eebb-4862-aed4-f80e7e2eb799": {
+        "record": {
+          "id": "schedule-fbe97d26-eebb-4862-aed4-f80e7e2eb799",
+          "kind": "daily",
+          "title": "观势 · 每天 08:00 早间消息",
+          "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。",
+          "time": "08:00:00.000",
+          "timeZone": "Asia/Shanghai",
+          "scheduledAt": "2026-11-13T00:00:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        ],
+        "status": "active",
+        "updatedAt": "2026-11-12T00:00:00.075Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-12T00:00:00.000Z",
+          "deliveredAt": "2026-11-12T00:00:00.075Z",
+          "messageId": "5041487b-f105-4b00-9825-e5c5edb67c8d",
+          "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-10-28T00:00:00.000Z",
+              "deliveredAt": "2026-10-28T00:00:00.030Z",
+              "messageId": "5a9cc0e2-839b-4090-b30e-1b19e3c9466e",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-29T00:00:00.000Z",
+              "deliveredAt": "2026-10-29T00:00:00.147Z",
+              "messageId": "df7cfd08-a038-4ce9-83e6-488c6749fe8b",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-30T00:00:00.000Z",
+              "deliveredAt": "2026-10-30T00:00:00.140Z",
+              "messageId": "c1b21bd8-573c-4030-a0e2-19b1ac714574",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-10-31T00:00:00.000Z",
+              "deliveredAt": "2026-10-31T00:00:00.114Z",
+              "messageId": "cec1d421-9295-45a3-8bd4-3d73eefe113a",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-01T00:00:00.000Z",
+              "deliveredAt": "2026-11-01T00:00:00.164Z",
+              "messageId": "71f03daa-154d-4ba6-a1cf-9d6592fb5ebc",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-02T00:00:00.000Z",
+              "deliveredAt": "2026-11-02T00:00:00.164Z",
+              "messageId": "4ca95942-051c-4bd0-bc93-ccf93c552c7d",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-03T00:00:00.000Z",
+              "deliveredAt": "2026-11-03T00:00:00.145Z",
+              "messageId": "b9db994b-48f4-418f-a733-7a8fb299d300",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-04T00:00:00.000Z",
+              "deliveredAt": "2026-11-04T00:00:00.139Z",
+              "messageId": "504b20a1-7470-4cf7-a029-a5529bfa2c07",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-05T00:00:00.000Z",
+              "deliveredAt": "2026-11-05T00:00:00.121Z",
+              "messageId": "456f04f4-e213-447f-85aa-277a1c3fe12c",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-06T00:00:00.000Z",
+              "deliveredAt": "2026-11-06T00:00:00.132Z",
+              "messageId": "5ee8e506-128c-4912-aa8f-3c8e1fe14ee3",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-07T00:00:00.000Z",
+              "deliveredAt": "2026-11-07T00:00:00.126Z",
+              "messageId": "80cd72b6-9be8-42db-9709-fe298c0d9695",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-08T00:00:00.000Z",
+              "deliveredAt": "2026-11-08T00:00:00.122Z",
+              "messageId": "6686a990-29a2-4409-801a-1d0c9734a2a4",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-09T00:00:00.000Z",
+              "deliveredAt": "2026-11-09T00:00:00.828Z",
+              "messageId": "a060e164-c41f-4020-aec5-715b5b68dc1d",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-10T00:00:00.000Z",
+              "deliveredAt": "2026-11-10T00:00:00.073Z",
+              "messageId": "af3278b6-2bd6-4a22-8198-2436d57d8079",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-11T00:00:00.000Z",
+              "deliveredAt": "2026-11-11T00:00:00.091Z",
+              "messageId": "e9c3bff6-93c8-4f49-972b-fa5bea95f625",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            },
+            {
+              "scheduledAt": "2026-11-12T00:00:00.000Z",
+              "deliveredAt": "2026-11-12T00:00:00.075Z",
+              "messageId": "5041487b-f105-4b00-9825-e5c5edb67c8d",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每天 08:00 的观势早间消息。读取 morning-message-brief 技能并按它执行：先读完前一日 08:00（含）到今日 08:00（不含）的全部 market_messages，再按题材加情绪写成一份分析推到飞书。重复消息不推，同类型但没有新进展的不展开。取数只用 theme-emotion-daily/scripts/market_query.py。用 feishu-push，--sender yan，--priority normal，标题「观势 · 早间消息 当天日期」。推完回报「已推送 + 窗口条数 + 写入条数 + 未展开条数」。失败说明原因，不要假装成功。不要荐股。"
+            }
+          ],
+          "earlierRecordsUnavailable": false,
+          "earlierRecordsPruned": false
+        }
+      },
+      "schedule-202b050f-b048-41f6-bb78-776bfa8db102": {
+        "record": {
+          "id": "schedule-202b050f-b048-41f6-bb78-776bfa8db102",
+          "kind": "weekly",
+          "title": "观势 · 每个交易日 17:30 个股涨停原因",
+          "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。",
+          "time": "17:30:00.000",
+          "timeZone": "Asia/Shanghai",
+          "weekdays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "scheduledAt": "2026-11-11T09:30:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        ],
+        "status": "paused",
+        "updatedAt": "2026-11-10T09:30:00.075Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-10T09:30:00.000Z",
+          "deliveredAt": "2026-11-10T09:30:00.075Z",
+          "messageId": "22144184-0de8-40b0-81e7-1a3e3d1e6be3",
+          "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-10-30T09:30:00.000Z",
+              "deliveredAt": "2026-10-30T09:30:00.123Z",
+              "messageId": "bfb89456-39f6-47b5-8347-9025c83c3da7",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-02T09:30:00.000Z",
+              "deliveredAt": "2026-11-02T09:30:00.101Z",
+              "messageId": "49380ad7-3b23-44a6-b38e-6f20ef402e87",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-03T09:30:00.000Z",
+              "deliveredAt": "2026-11-03T09:30:00.239Z",
+              "messageId": "46830239-25a7-4b2f-b822-9566d0bed1ef",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-04T09:30:00.000Z",
+              "deliveredAt": "2026-11-04T09:30:00.108Z",
+              "messageId": "d427b8f8-9440-4c68-b2c7-8a4fb52905d7",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-05T09:30:00.000Z",
+              "deliveredAt": "2026-11-05T09:30:00.108Z",
+              "messageId": "28823764-db40-439e-80bd-e082fd21df5a",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-06T09:30:00.000Z",
+              "deliveredAt": "2026-11-06T09:30:00.108Z",
+              "messageId": "e1151822-05a6-4474-ba77-a3f8cbdc29e5",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-09T09:30:00.000Z",
+              "deliveredAt": "2026-11-09T09:30:00.087Z",
+              "messageId": "1c39a464-a63c-4d38-942e-ea745f3f8db6",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            },
+            {
+              "scheduledAt": "2026-11-10T09:30:00.000Z",
+              "deliveredAt": "2026-11-10T09:30:00.075Z",
+              "messageId": "22144184-0de8-40b0-81e7-1a3e3d1e6be3",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 17:30 单独推送个股涨停原因。按顺序执行，不要省略：\n1. 先查 trade_cal 确认今天是否为 A 股交易日；不是交易日就只回复「今日非交易日，不推送」并结束。\n2. 读取 theme-emotion-daily 技能里的「个股涨停原因（17:30 单独推送）」。运行 python3 /home/hello/application/green/tidephase/tools/limitup_why_reflect.py pack --date 当天交易日。涨停和跌停都要写到。证据包里 stocks 是涨停，limit_downs 是跌停。\n3. 涨停和跌停都写。按技能「个股涨停原因」：合力要写市场为什么会一起推或一起退；主力自己推动的，按 F-030 写他的计划：先做低筹码；跟风一致看多时他在冲高里兑现、不再抬；大家都熬出尖叫、放量下跌，他才上场。游资是短情绪的加速和兑现，机构主力是筹码收集完之后的趋势。跌停同样分清是一条链一起到地板，还是刚连过板的票在兑现。不按流通市值切。没有对上的消息就写没有，禁止编新闻。禁止买卖点、目标价、必涨。禁止把数字铺成正文。\n4. 用 feishu-push 一次推送：--sender yan --title \"观势 · 涨停与跌停 YYYY-MM-DD\" --priority normal。不要拆成多条。\n5. 这不是反思。不要写入 reflection，不要写入迭代认知，不要运行 limitup_why_reflect.py commit。\n6. 回报「已推送 + 标题 + 涨停只数 + 跌停只数」；失败就说明原因，不要假装成功。"
+            }
+          ],
+          "earlierRecordsUnavailable": false,
+          "earlierRecordsPruned": false
+        }
+      },
+      "schedule-open-first-0925": {
+        "record": {
+          "id": "schedule-open-first-0925",
+          "kind": "weekly",
+          "title": "观势 · 每个交易日 09:25 可能的一板",
+          "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。",
+          "time": "09:25:00.000",
+          "timeZone": "Asia/Shanghai",
+          "weekdays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "scheduledAt": "2026-11-12T01:25:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        ],
+        "status": "paused",
+        "updatedAt": "2026-11-11T01:25:00.087Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-11T01:25:00.000Z",
+          "deliveredAt": "2026-11-11T01:25:00.087Z",
+          "messageId": "cf065d1f-cbc1-4fda-b118-51ff1ddfe01c",
+          "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-11-02T01:25:00.000Z",
+              "deliveredAt": "2026-11-02T01:25:00.100Z",
+              "messageId": "befb75b4-a3d4-45c5-961f-fb29ca0fc286",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-03T01:25:00.000Z",
+              "deliveredAt": "2026-11-03T01:25:00.109Z",
+              "messageId": "2e0cd093-afa2-49e1-9448-b9c2b313ad05",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-04T01:25:00.000Z",
+              "deliveredAt": "2026-11-04T01:25:00.154Z",
+              "messageId": "31d361e9-61f4-419d-a271-5b7894050bb9",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-05T01:25:00.000Z",
+              "deliveredAt": "2026-11-05T01:25:00.116Z",
+              "messageId": "04ea5d24-9670-472f-8408-3368f7b73445",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-06T01:25:00.000Z",
+              "deliveredAt": "2026-11-06T01:25:00.127Z",
+              "messageId": "5e6136d9-d467-4d39-bb21-4e1c7f9e72a6",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-09T01:25:00.000Z",
+              "deliveredAt": "2026-11-09T01:25:00.086Z",
+              "messageId": "475e4959-3a90-4302-a15d-815f9aacddba",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-10T01:25:00.000Z",
+              "deliveredAt": "2026-11-10T01:25:00.074Z",
+              "messageId": "42bd049e-7f56-44dd-baac-e3fab209e0f7",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            },
+            {
+              "scheduledAt": "2026-11-11T01:25:00.000Z",
+              "deliveredAt": "2026-11-11T01:25:00.087Z",
+              "messageId": "cf065d1f-cbc1-4fda-b118-51ff1ddfe01c",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "交易日 09:25 竞价一板。不要读技能，不要分析，不要改写，不要查库。只运行 python3 /home/hello/application/green/tidephase/tools/open_first_auction.py push 。脚本自己发飞书。你的全部回复只能是脚本打印的那一行。"
+            }
+          ],
+          "earlierRecordsUnavailable": false,
+          "earlierRecordsPruned": false
+        }
+      },
+      "schedule-68fa56ad-9296-4177-b921-5e8b5a105794": {
+        "record": {
+          "id": "schedule-68fa56ad-9296-4177-b921-5e8b5a105794",
+          "kind": "weekly",
+          "title": "梁记 · 每周一 09:00 有心之物真实需求挖掘",
+          "prompt": "每周一 09:00 的「有心之物 · 真实需求挖掘」（原梁记的任务）。先读 media-liangji 角色技能，再按下面的任务说明执行。\n\n你是梁记工作室的AI运营助手，负责「有心之物」项目的真实需求挖掘。\n\n## 项目定位（重要，决定了筛什么）\n一个人做**真正被需要的 AI 产品**——**硬件、软件、网站都算**。\n**核心不是形态，是真实场景 + 真实需求。** 不为硬件而硬件，也不为软件而软件：需求是真的，就用最合适的载体做。\n\n变现靠内容 + 知识资产，不做需要持续运维的 SaaS（一人公司的硬约束）。\n\n## 使用的 skill（必须遵循）\n\n- **筛选标准**：遵循 `topic-radar` skill 的五类信号（吃灰证据/劝退帖/求购帖/情绪场景/付费证据）与五道筛\n- **写入与通知**：遵循 `social-ops` skill 的命令规范与常见坑\n- 不要使用已归档的 `video-creator` / `shooting-guide` / `内容捕手`\n\n## 任务目标\n每周一次，找出 3-5 个\"有人已经在为它花钱\"的真实需求。宁缺毋滥——宁可只报1个，也不要凑数。\n\n## 目标用户画像\n- Z世代（1995-2009），18-29岁为主，分三层：在校生(18-21)、职场新人(22-25)、职场中坚(26-29)\n- **男性情绪消费占比55.9%，孤独感3.36**（要\"被理解、被认可\"）\n- **女性偏好松弛感、自我犒赏**（52.6%首选幸福感与松弛感）\n- 46.2%从未买过AI硬件，只有25.1%敢尝鲜 → \"想做但不敢买\"是最大市场缝隙\n- 情绪消费高峰：**深夜22点后（33.2%）**、**工作间歇（26.1%）**\n- 价格敏感：76%把\"经济实用\"列为首要标准；月均情绪消费949元\n- 审美：丑萌、情绪化、抽象、新中式；**不完美 > 完美**\n- 注意：也可以服务非Z世代人群（如新父母、养宠人、个人投资者），但必须是真实付费人群\n\n## 五类信号（按价值排序，至少覆盖前三类）\n\n### 信号1：吃灰证据（最强，负向验证）\n去闲鱼/转转搜转卖理由，看什么产品\"买来吃灰\"\"智商税\"\"用两次就放着\"。\n- **被转卖但仍有人买 = 需求真实；被转卖且无人接盘 = 伪需求**\n- 搜索词：`AI桌宠 吃灰`、`AI玩具 智商税`、`陪伴机器人 吃灰`、`XX软件 买了没用`\n- 必须记录：转卖理由原文关键词 + 价格跌幅\n\n### 信号2：劝退/求劝退帖（最大市场缝隙）\nB站/小红书/知乎上\"求劝退\"\"值得买吗\"\"是不是智商税\"\"会不会吃灰\"。\n- 说明：**想买但不敢**，这是最好的切入位置\n- 搜索词：`XXX 值得买吗`、`求劝退`、`是不是智商税`\n\n### 信号3：求推荐/求购帖（需求存在但供给不足）\n\"有没有XXX\"\"为什么没有XXX\"\"求推荐\"类帖子。\n- 记录：提问频次、评论区附和量、有没有人在做\n\n### 信号4：情绪场景UGC（需求发生的现场）\n深夜/独居/加班/emo/治愈/带娃/养宠/看盘等真实场景下的表达，看看他们在那个时刻缺什么。\n- 重点：**不是找产品，是找\"那个时刻他缺什么\"**\n\n### 信号5：付费证据（正向验证）\n- 淘宝/闲鱼/拼多多销量（写平台+商品+数字）\n- 众筹平台（Kickstarter/摩点/京东众筹）筹资额\n- 软件/订阅制产品的付费墙与用户量（如 App Store 榜单、定价页）\n- 高价定制/代做服务存在（说明需求真但供给贵）\n\n## 五道硬筛（缺一不可）\n\n### 1. 真实场景（第一道，最重要）\n必须能说清楚：\"**谁，在什么时刻，遇到什么问题，现在怎么凑合解决的**\"。\n说不清楚场景的，一律淘汰。抽象人群（\"年轻人\"\"上班族\"）不算场景。\n\n### 2. 需求已被钱验证\n必须找到具体证据。禁止：仅有搜索热词、仅有科技媒体报道、仅\"看起来很酷\"。\n\n### 3. 形态匹配（不是\"必须硬件\"）\n问：**这个东西用哪种载体最合适？**\n- 去掉硬件需求仍成立 → **用软件/网站做**，成本更低（并注明\"避免为硬件而硬件\"）\n- 去掉硬件需求不成立（陪伴、触摸、装饰、存在感）→ **必须硬件**\n- 软硬结合更优 → **硬件+软件**\n- 附加约束：**不要选需要持续运维的SaaS/在线服务**（一人公司扛不住），优先本地软件、单机工具、网站内容产品\n\n### 4. 可制作性\n- 硬件：2-4 周内能做出 v1\n- 软件/网站：2 周内能做出可演示版本\n- 超出的一律不报\n\n### 5. 传播画面\n做出来/用起来的瞬间，有没有冲击力？上不上镜？别人会不会想试？\n- 软件类可用\"效果前后对比\"制造画面\n\n## 搜索方向（每周轮换，软硬件都覆盖）\n**硬件类**\n- 闲鱼/转转：吃灰转卖、二手折价（信号1）\n- 淘宝/拼多多：销量+差评\n- 众筹：Kickstarter / 摩点 / 京东众筹\n- GitHub Trending：AI+硬件开源项目\n\n**软件/网站类（新增重点）**\n- 小红书/B站/知乎：**\"求一个XX工具\"\"有没有XX软件\"**（工具缺口）\n- App Store / 微信小程序榜单：新上榜的垂直小工具\n- Product Hunt / Hacker News / V2EX：独立开发者新产品\n- Reddit：r/SideProject、r/SomebodyMakeThis\n- 行业垂直论坛：宠物、育儿、投资、健身、二手交易等\n\n**通用**\n- 行业报告：AI陪伴硬件、谷子经济、潮玩、银发经济、母婴、宠物、个人投资\n- 深夜/独居/加班等情绪场景 UGC\n\n## 输出格式（每条一个需求卡片）\n1. 需求名称\n2. 需求类型（AI硬件 / 硬件+软件 / AI软件/网站 / 其他）\n3. 一句话描述\n4. **真实场景**（谁+什么时刻+什么问题+现在怎么凑合）\n5. 需求证据（具体来源+数字）\n6. 证据强度（已付费 / 已复购 / 有人在抱怨 / 仅讨论）\n7. 目标人群\n8. 现有方案缺陷\n9. **形态建议**（必须有硬件 / 硬件加分 / 不需要硬件）—— 这里的含义是\"最合适载体\"，不是\"是否符合硬件\"\n10. 供给缺口（完全空白 / 有方案但很烂 / 已红海）\n11. 可制作性（2周内 / 2-4周 / 1-2个月 / 更久）\n12. 传播画面（强 / 中 / 弱）\n13. 综合评分（1-5，按 场景清晰度×需求证据×供给缺口 加权，**不按形态加分**）\n14. 数据来源（URL或平台名）\n15. 挖掘日期（今天）\n16. 当前阶段 = 待评估\n17. 备注\n\n## 执行步骤\n1. 先读飞书表已有记录去重：\n   `lark-cli base +record-list --base-token HEcBbWQVjaidy6sO7ghc9Essn6g --table-id tblTgiDeqB7WM9WV --limit 200 --as user --format json`\n2. 多轮 web_search 收集五类信号；必要时 web_fetch 核实\n3. 按五道筛筛选，输出 3-5 个需求\n4. 写入飞书表：\n   `lark-cli base +record-batch-create --base-token HEcBbWQVjaidy6sO7ghc9Essn6g --table-id tblTgiDeqB7WM9WV --as user --json '{\"fields\":[...],\"rows\":[[...]]}'`\n   注意：需求类型的选项值必须是 **\"AI硬件\" / \"硬件+软件\" / \"AI软件/网站\" / \"其他\"** 之一，写错会失败\n5. feishu-push 推送（sender=liangji，priority=normal）：\n   - 本周 TOP3（名称+场景+证据摘要+推荐度）\n   - **本周\"吃灰榜\"**：哪些产品在大量转卖、理由是什么\n   - 淘汰说明（多少候选被筛掉、原因）\n   - 若无合格需求，诚实说明\"本周无合格需求\"\n\n## 红线\n- 绝不收录需要开模/批量生产的重资产方向\n- 绝不收录侵权风险项目（现成动漫IP改造）\n- 证据必须真实可查，严禁编造数字或来源\n- 不碰金融/医疗/法律建议类需求（金融类只做\"数据工具\"，不做\"荐股/预测\"）\n- 每条需求不超过300字",
+          "time": "09:00:00.000",
+          "timeZone": "Asia/Shanghai",
+          "weekdays": [
+            1
+          ],
+          "scheduledAt": "2026-11-16T01:00:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-41dd5c27-0425-4b92-ba96-3f4adb9b27da"
+        ],
+        "status": "active",
+        "updatedAt": "2026-11-09T01:00:00.054Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-41dd5c27-0425-4b92-ba96-3f4adb9b27da"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-09T01:00:00.000Z",
+          "deliveredAt": "2026-11-09T01:00:00.054Z",
+          "messageId": "177999c5-7ca2-4010-b12a-21f1661fffca",
+          "targetSessionId": "session-41dd5c27-0425-4b92-ba96-3f4adb9b27da"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-11-09T01:00:00.000Z",
+              "deliveredAt": "2026-11-09T01:00:00.054Z",
+              "messageId": "177999c5-7ca2-4010-b12a-21f1661fffca",
+              "targetSessionId": "session-41dd5c27-0425-4b92-ba96-3f4adb9b27da",
+              "prompt": "每周一 09:00 的「有心之物 · 真实需求挖掘」（原梁记的任务）。先读 media-liangji 角色技能，再按下面的任务说明执行。\n\n你是梁记工作室的AI运营助手，负责「有心之物」项目的真实需求挖掘。\n\n## 项目定位（重要，决定了筛什么）\n一个人做**真正被需要的 AI 产品**——**硬件、软件、网站都算**。\n**核心不是形态，是真实场景 + 真实需求。** 不为硬件而硬件，也不为软件而软件：需求是真的，就用最合适的载体做。\n\n变现靠内容 + 知识资产，不做需要持续运维的 SaaS（一人公司的硬约束）。\n\n## 使用的 skill（必须遵循）\n\n- **筛选标准**：遵循 `topic-radar` skill 的五类信号（吃灰证据/劝退帖/求购帖/情绪场景/付费证据）与五道筛\n- **写入与通知**：遵循 `social-ops` skill 的命令规范与常见坑\n- 不要使用已归档的 `video-creator` / `shooting-guide` / `内容捕手`\n\n## 任务目标\n每周一次，找出 3-5 个\"有人已经在为它花钱\"的真实需求。宁缺毋滥——宁可只报1个，也不要凑数。\n\n## 目标用户画像\n- Z世代（1995-2009），18-29岁为主，分三层：在校生(18-21)、职场新人(22-25)、职场中坚(26-29)\n- **男性情绪消费占比55.9%，孤独感3.36**（要\"被理解、被认可\"）\n- **女性偏好松弛感、自我犒赏**（52.6%首选幸福感与松弛感）\n- 46.2%从未买过AI硬件，只有25.1%敢尝鲜 → \"想做但不敢买\"是最大市场缝隙\n- 情绪消费高峰：**深夜22点后（33.2%）**、**工作间歇（26.1%）**\n- 价格敏感：76%把\"经济实用\"列为首要标准；月均情绪消费949元\n- 审美：丑萌、情绪化、抽象、新中式；**不完美 > 完美**\n- 注意：也可以服务非Z世代人群（如新父母、养宠人、个人投资者），但必须是真实付费人群\n\n## 五类信号（按价值排序，至少覆盖前三类）\n\n### 信号1：吃灰证据（最强，负向验证）\n去闲鱼/转转搜转卖理由，看什么产品\"买来吃灰\"\"智商税\"\"用两次就放着\"。\n- **被转卖但仍有人买 = 需求真实；被转卖且无人接盘 = 伪需求**\n- 搜索词：`AI桌宠 吃灰`、`AI玩具 智商税`、`陪伴机器人 吃灰`、`XX软件 买了没用`\n- 必须记录：转卖理由原文关键词 + 价格跌幅\n\n### 信号2：劝退/求劝退帖（最大市场缝隙）\nB站/小红书/知乎上\"求劝退\"\"值得买吗\"\"是不是智商税\"\"会不会吃灰\"。\n- 说明：**想买但不敢**，这是最好的切入位置\n- 搜索词：`XXX 值得买吗`、`求劝退`、`是不是智商税`\n\n### 信号3：求推荐/求购帖（需求存在但供给不足）\n\"有没有XXX\"\"为什么没有XXX\"\"求推荐\"类帖子。\n- 记录：提问频次、评论区附和量、有没有人在做\n\n### 信号4：情绪场景UGC（需求发生的现场）\n深夜/独居/加班/emo/治愈/带娃/养宠/看盘等真实场景下的表达，看看他们在那个时刻缺什么。\n- 重点：**不是找产品，是找\"那个时刻他缺什么\"**\n\n### 信号5：付费证据（正向验证）\n- 淘宝/闲鱼/拼多多销量（写平台+商品+数字）\n- 众筹平台（Kickstarter/摩点/京东众筹）筹资额\n- 软件/订阅制产品的付费墙与用户量（如 App Store 榜单、定价页）\n- 高价定制/代做服务存在（说明需求真但供给贵）\n\n## 五道硬筛（缺一不可）\n\n### 1. 真实场景（第一道，最重要）\n必须能说清楚：\"**谁，在什么时刻，遇到什么问题，现在怎么凑合解决的**\"。\n说不清楚场景的，一律淘汰。抽象人群（\"年轻人\"\"上班族\"）不算场景。\n\n### 2. 需求已被钱验证\n必须找到具体证据。禁止：仅有搜索热词、仅有科技媒体报道、仅\"看起来很酷\"。\n\n### 3. 形态匹配（不是\"必须硬件\"）\n问：**这个东西用哪种载体最合适？**\n- 去掉硬件需求仍成立 → **用软件/网站做**，成本更低（并注明\"避免为硬件而硬件\"）\n- 去掉硬件需求不成立（陪伴、触摸、装饰、存在感）→ **必须硬件**\n- 软硬结合更优 → **硬件+软件**\n- 附加约束：**不要选需要持续运维的SaaS/在线服务**（一人公司扛不住），优先本地软件、单机工具、网站内容产品\n\n### 4. 可制作性\n- 硬件：2-4 周内能做出 v1\n- 软件/网站：2 周内能做出可演示版本\n- 超出的一律不报\n\n### 5. 传播画面\n做出来/用起来的瞬间，有没有冲击力？上不上镜？别人会不会想试？\n- 软件类可用\"效果前后对比\"制造画面\n\n## 搜索方向（每周轮换，软硬件都覆盖）\n**硬件类**\n- 闲鱼/转转：吃灰转卖、二手折价（信号1）\n- 淘宝/拼多多：销量+差评\n- 众筹：Kickstarter / 摩点 / 京东众筹\n- GitHub Trending：AI+硬件开源项目\n\n**软件/网站类（新增重点）**\n- 小红书/B站/知乎：**\"求一个XX工具\"\"有没有XX软件\"**（工具缺口）\n- App Store / 微信小程序榜单：新上榜的垂直小工具\n- Product Hunt / Hacker News / V2EX：独立开发者新产品\n- Reddit：r/SideProject、r/SomebodyMakeThis\n- 行业垂直论坛：宠物、育儿、投资、健身、二手交易等\n\n**通用**\n- 行业报告：AI陪伴硬件、谷子经济、潮玩、银发经济、母婴、宠物、个人投资\n- 深夜/独居/加班等情绪场景 UGC\n\n## 输出格式（每条一个需求卡片）\n1. 需求名称\n2. 需求类型（AI硬件 / 硬件+软件 / AI软件/网站 / 其他）\n3. 一句话描述\n4. **真实场景**（谁+什么时刻+什么问题+现在怎么凑合）\n5. 需求证据（具体来源+数字）\n6. 证据强度（已付费 / 已复购 / 有人在抱怨 / 仅讨论）\n7. 目标人群\n8. 现有方案缺陷\n9. **形态建议**（必须有硬件 / 硬件加分 / 不需要硬件）—— 这里的含义是\"最合适载体\"，不是\"是否符合硬件\"\n10. 供给缺口（完全空白 / 有方案但很烂 / 已红海）\n11. 可制作性（2周内 / 2-4周 / 1-2个月 / 更久）\n12. 传播画面（强 / 中 / 弱）\n13. 综合评分（1-5，按 场景清晰度×需求证据×供给缺口 加权，**不按形态加分**）\n14. 数据来源（URL或平台名）\n15. 挖掘日期（今天）\n16. 当前阶段 = 待评估\n17. 备注\n\n## 执行步骤\n1. 先读飞书表已有记录去重：\n   `lark-cli base +record-list --base-token HEcBbWQVjaidy6sO7ghc9Essn6g --table-id tblTgiDeqB7WM9WV --limit 200 --as user --format json`\n2. 多轮 web_search 收集五类信号；必要时 web_fetch 核实\n3. 按五道筛筛选，输出 3-5 个需求\n4. 写入飞书表：\n   `lark-cli base +record-batch-create --base-token HEcBbWQVjaidy6sO7ghc9Essn6g --table-id tblTgiDeqB7WM9WV --as user --json '{\"fields\":[...],\"rows\":[[...]]}'`\n   注意：需求类型的选项值必须是 **\"AI硬件\" / \"硬件+软件\" / \"AI软件/网站\" / \"其他\"** 之一，写错会失败\n5. feishu-push 推送（sender=liangji，priority=normal）：\n   - 本周 TOP3（名称+场景+证据摘要+推荐度）\n   - **本周\"吃灰榜\"**：哪些产品在大量转卖、理由是什么\n   - 淘汰说明（多少候选被筛掉、原因）\n   - 若无合格需求，诚实说明\"本周无合格需求\"\n\n## 红线\n- 绝不收录需要开模/批量生产的重资产方向\n- 绝不收录侵权风险项目（现成动漫IP改造）\n- 证据必须真实可查，严禁编造数字或来源\n- 不碰金融/医疗/法律建议类需求（金融类只做\"数据工具\"，不做\"荐股/预测\"）\n- 每条需求不超过300字"
+            }
+          ],
+          "earlierRecordsUnavailable": true,
+          "earlierRecordsPruned": false
+        }
+      },
+      "schedule-gh-weekly-mon-0900": {
+        "record": {
+          "id": "schedule-gh-weekly-mon-0900",
+          "kind": "weekly",
+          "title": "公司经营 · 每周一 09:00 GitHub 每周热榜推送",
+          "prompt": "每周一 09:00 的 GitHub 每周热榜推送。按顺序执行，不要省略。\n\n1. 运行：\npython3 /home/hello/文档/deepseek-harness/公司经营/tools/gh_weekly_report.py --push --sender 公司经营\n脚本抓取 GitHub Trending（weekly）和 GitHub Search API，把完整报告写到 /home/hello/文档/deepseek-harness/公司经营/reports/gh_weekly/当天日期.md，并通过飞书依次推送 4 张卡片：总榜、新星榜、AI/Agent 专题、中文社区+趋势。不要传 --with-lang-board，不要补推分语言榜。\n\n2. 校验结果：\n- stdout 出现「推送完成」，stderr 中 4 张卡片都显示「推送成功」。\n- 返回码不是 0，或总榜为空：不要编造数据。如果当天报告文件已经生成，用 feishu-push 推一条 priority=important 的告警，说明「本周 GitHub 热榜抓取异常」并写上失败原因。不要把已经推成功的卡片再推一次。\n\n3. 读取 reports/gh_weekly/当天日期.md，给出 3 到 5 条趋势解读，要有具体项目名和数据，不要空话。\n\n4. 用一段短文向梁总汇报：报告日期、抓取项目总数、推送卡片数量、3 条最重要的观察、完整报告文件路径。",
+          "time": "09:00:00.000",
+          "timeZone": "Asia/Shanghai",
+          "weekdays": [
+            1
+          ],
+          "scheduledAt": "2026-11-16T01:00:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-c411a1ab-d5ba-4673-9ec9-4e0460281b61"
+        ],
+        "status": "active",
+        "updatedAt": "2026-11-09T01:00:00.108Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-c411a1ab-d5ba-4673-9ec9-4e0460281b61"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-09T01:00:00.000Z",
+          "deliveredAt": "2026-11-09T01:00:00.108Z",
+          "messageId": "1b77a2f0-91c4-4c6f-8878-f7868ae7a781",
+          "targetSessionId": "session-c411a1ab-d5ba-4673-9ec9-4e0460281b61"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-11-09T01:00:00.000Z",
+              "deliveredAt": "2026-11-09T01:00:00.108Z",
+              "messageId": "1b77a2f0-91c4-4c6f-8878-f7868ae7a781",
+              "targetSessionId": "session-c411a1ab-d5ba-4673-9ec9-4e0460281b61",
+              "prompt": "每周一 09:00 的 GitHub 每周热榜推送。按顺序执行，不要省略。\n\n1. 运行：\npython3 /home/hello/文档/deepseek-harness/公司经营/tools/gh_weekly_report.py --push --sender 公司经营\n脚本抓取 GitHub Trending（weekly）和 GitHub Search API，把完整报告写到 /home/hello/文档/deepseek-harness/公司经营/reports/gh_weekly/当天日期.md，并通过飞书依次推送 4 张卡片：总榜、新星榜、AI/Agent 专题、中文社区+趋势。不要传 --with-lang-board，不要补推分语言榜。\n\n2. 校验结果：\n- stdout 出现「推送完成」，stderr 中 4 张卡片都显示「推送成功」。\n- 返回码不是 0，或总榜为空：不要编造数据。如果当天报告文件已经生成，用 feishu-push 推一条 priority=important 的告警，说明「本周 GitHub 热榜抓取异常」并写上失败原因。不要把已经推成功的卡片再推一次。\n\n3. 读取 reports/gh_weekly/当天日期.md，给出 3 到 5 条趋势解读，要有具体项目名和数据，不要空话。\n\n4. 用一段短文向梁总汇报：报告日期、抓取项目总数、推送卡片数量、3 条最重要的观察、完整报告文件路径。"
+            }
+          ],
+          "earlierRecordsUnavailable": true,
+          "earlierRecordsPruned": false
+        }
+      },
+      "schedule-dip-pool-0830": {
+        "record": {
+          "id": "schedule-dip-pool-0830",
+          "kind": "weekly",
+          "title": "观势 · 每个交易日 08:30 低吸股票池",
+          "prompt": "每个交易日 08:30 的低吸股票池。按顺序执行，不要省略：\n1. 运行 python3 /home/hello/application/green/tidephase/tools/dip_pool.py --push。\n脚本自己查交易日、用前一交易日收盘筛名单、生成文字和一张图，并推到飞书。标题固定为「低吸股票池」。文字一条，图一张。\n2. 脚本打印「今日非交易日，不推送」就到此结束，不要再发。\n3. 不要改名单，不要自己另写一份，不要再发一条，不要把可盯和被带动合成别的标题。\n4. 不要写买入、卖出、目标价、必涨、荐股。\n5. 回报脚本最后一行。失败就说明原因，不要假装已推送。",
+          "time": "08:30:00.000",
+          "timeZone": "Asia/Shanghai",
+          "weekdays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "scheduledAt": "2026-11-13T00:30:00.000Z"
+        },
+        "involvedSessionIds": [
+          "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        ],
+        "status": "active",
+        "updatedAt": "2026-11-12T00:30:00.082Z",
+        "target": {
+          "kind": "session",
+          "sessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "lastDelivery": {
+          "scheduledAt": "2026-11-12T00:30:00.000Z",
+          "deliveredAt": "2026-11-12T00:30:00.082Z",
+          "messageId": "1d091628-7d35-4aaa-9605-483a661f4bbe",
+          "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4"
+        },
+        "deliveryHistory": {
+          "records": [
+            {
+              "scheduledAt": "2026-11-12T00:30:00.000Z",
+              "deliveredAt": "2026-11-12T00:30:00.082Z",
+              "messageId": "1d091628-7d35-4aaa-9605-483a661f4bbe",
+              "targetSessionId": "session-60187779-f1fd-4576-bd0f-1093dc5818e4",
+              "prompt": "每个交易日 08:30 的低吸股票池。按顺序执行，不要省略：\n1. 运行 python3 /home/hello/application/green/tidephase/tools/dip_pool.py --push。\n脚本自己查交易日、用前一交易日收盘筛名单、生成文字和一张图，并推到飞书。标题固定为「低吸股票池」。文字一条，图一张。\n2. 脚本打印「今日非交易日，不推送」就到此结束，不要再发。\n3. 不要改名单，不要自己另写一份，不要再发一条，不要把可盯和被带动合成别的标题。\n4. 不要写买入、卖出、目标价、必涨、荐股。\n5. 回报脚本最后一行。失败就说明原因，不要假装已推送。"
+            }
+          ],
+          "earlierRecordsUnavailable": false,
+          "earlierRecordsPruned": false
+        }
+      }
+    }
+  }
+}

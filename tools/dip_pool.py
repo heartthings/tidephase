@@ -6,7 +6,7 @@
 并且已经出现低吸信号（打到调整低点后收回 4% 以上，量能低于高潮，收盘仍低于前高）。
 前一交易日被带动涨停的，单独放在「被带动」，不放进可盯。
 
---push：文字一条、图一张，标题都是「低吸股票池」，发到观势早间同一个飞书。
+--push：文字和图片合并成一条消息，标题「低吸股票池」，发到观势早间同一个飞书。
 不是交易日不发。同一天发过不再发。
 """
 from __future__ import annotations
@@ -378,17 +378,19 @@ def render(result: dict) -> Path:
 
 def _send(content: str, image: Path) -> None:
     push = _push_bin()
+    combined = subprocess.run(
+        [sys.executable, str(push), "--sender", "yan", "--title", TITLE,
+         "--content", content, "--image", str(image), "--priority", "normal"],
+    )
+    if combined.returncode == 0:
+        return
+    # 图片上传失败时退回纯文字，避免一条都不发。
     text = subprocess.run(
         [sys.executable, str(push), "--sender", "yan", "--title", TITLE,
          "--content", content, "--priority", "normal"],
     )
     if text.returncode != 0:
         raise SystemExit(text.returncode)
-    pic = subprocess.run(
-        [sys.executable, str(push), "--sender", "yan", "--title", TITLE, "--image", str(image)],
-    )
-    if pic.returncode != 0:
-        raise SystemExit(pic.returncode)
 
 
 def main() -> None:
